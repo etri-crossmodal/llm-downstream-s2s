@@ -1,0 +1,11 @@
+pytorch-lightning[deepspeed]==1.8.0.post1
+tokenizers==0.13.2
+transformers==4.24.0
+datasets==2.8.0
+evaluate==0.3.0
+scikit-learn==1.1.3
+tensorboard==2.10
+looseversion
+jinja2
+jellyfish
+sentencepiece

@@ -1,0 +1,1 @@
+python train.py -save_path ./nsmc_test_kebyt5-base-pv230125 -init_model ../models/kebyt5-base-preview-1nd-230125 -max_epoch 4 -learning_rate 3e-5 -gpus 4 -strategy ddp -float_precision 16 -grad_acc 2 -batch_size 32
