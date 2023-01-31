@@ -146,13 +146,14 @@ if __name__ == '__main__':
     def _decode_a_batch(grp):
         return tknizer.batch_decode(grp, skip_special_tokens=True)
 
-    with mp.Pool(processes=8) as pool:
-        print("Detokenize Prediction Output.")
-        detokenized_preds = pool.map(_decode_a_batch, test_helper.INFER_PREDICTIONS)
+    # use half of available cores.
+    effective_cpu_cnts = len(os.sched_getaffinity(0))//2
 
-    with mp.Pool(processes=8) as pool:
-        print("Detokenize Gold Lables.")
+    with mp.Pool(processes=effective_cpu_cnts) as pool:
+        print(f"Detokenize Predicted Output and labels, with {effective_cpu_cnts} processes.")
+        detokenized_preds = pool.map(_decode_a_batch, test_helper.INFER_PREDICTIONS)
         detokenized_lbls = pool.map(_decode_a_batch, test_helper.INFER_LABELS)
+
 
     test_helper.INFER_LABELS = [item for sublist in detokenized_lbls for item in sublist]
     test_helper.INFER_PREDICTIONS = [item for sublist in detokenized_preds for item in sublist]

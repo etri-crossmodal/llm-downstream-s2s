@@ -70,7 +70,7 @@ def get_task_data(task_name: str, batch_size: int, tokenizer_str: str):
         # Korail, Internal Dataset, Multiclass classification problem.
         #data_module = korTrainTextDataModule(batch_size=batch_size)
         # MTL
-        data_module = korTrainTextDataModule(batch_size=batch_size, use_mtl=True)
+        data_module = korTrainTextDataModule(batch_size=batch_size, use_mtl=False)
         collator = generic.GenericPromptedDataCollator(input_field_name="title",
                 label_field_name="label",
                 input_template="Classification Test:\n\n{{ input }}",
