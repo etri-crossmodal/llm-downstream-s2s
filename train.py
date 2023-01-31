@@ -47,13 +47,8 @@ from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
 
 
 from models.mlm_plmodule_wrapper import ETRIT5ConditionalGenModelLightningModule
-from datamodules.nsmc_pldm import NSMCDataModule
-from datamodules.klue_nli_pldm import KLUENLIDataModule, KLUEYNATDataModule
-from datamodules.kornli_pldm import KorNLIDataModule
-from datamodules.pawsx_pldm import paws_xDataModule
-from datamodules.kortrain_test import korTrainTextDataModule
 
-from collators import (generic, klue, pawsx)
+import task_utils
 
 def get_argparser():
     """ generate argument parser. """
@@ -192,61 +187,11 @@ if __name__ == '__main__':
         optimizer_arg = "adafactor"
 
     # ================ FIXME for Training ==================
-    if args.task == "nsmc-naive":
-        # NSMC - naive version
-        data_module = NSMCDataModule(batch_size=args.batch_size)
-        collator = generic.GenericDataCollator(input_field_name="document",
-                                               label_field_name="label",
-                                               tokenizer=AutoTokenizer.from_pretrained(args.init_model),
-                                               label_map={0: 'positive', 1: 'negative'})
-    elif args.task == "nsmc-prompted":
-        data_module = NSMCDataModule(batch_size=args.batch_size)
-        collator = generic.GenericPromptedDataCollator(input_field_name="document",
-                label_field_name="label",
-                input_template="nsmc sentiment classification: {{ input }}",
-                label_template="{{ label }}",
-                tokenizer=AutoTokenizer.from_pretrained(args.init_model),
-                label_map={0:'positive', 1:'negative'})
-    elif args.task == "klue-nli-prompted":
-        # Example 2: KLUE-NLI
-        data_module = KLUENLIDataModule(batch_size=args.batch_size)
-        collator = klue.KLUENLIDataCollator(tokenizer=AutoTokenizer.from_pretrained(args.init_model),)
-    elif args.task == "klue-ynat-prompted":
-        # Example: KLUE-YNAT
-        data_module = KLUEYNATDataModule(batch_size=args.batch_size)
-        collator = klue.KLUEYNATDataCollator(tokenizer=AutoTokenizer.from_pretrained(args.init_model),)
-    elif args.task == 'kornli-prompted':
-        # Example 3: KorNLI
-        data_module = KorNLIDataModule(batch_size=args.batch_size)
-        collator = klue.KLUENLIDataCollator(tokenizer=AutoTokenizer.from_pretrained(args.init_model),)
-    elif args.task == 'paws-x-kor':
-        data_module = paws_xDataModule(batch_size=args.batch_size)
-        collator = pawsx.PAWS_XDataCollator(tokenizer=AutoTokenizer.from_pretrained(args.init_model),)
-    elif args.task == 'kr-internal':
-        # Korail, Internal Dataset, Multiclass classification problem.
-        #data_module = korTrainTextDataModule(batch_size=args.batch_size)
-        # MTL
-        data_module = korTrainTextDataModule(batch_size=args.batch_size, use_mtl=True)
-        #data_module.setup()
-        collator = generic.GenericPromptedDataCollator(input_field_name="title",
-                label_field_name="label",
-                input_template="Classification Test:\n\n{{ input }}",
-                label_template="{{ label }}",
-                tokenizer=AutoTokenizer.from_pretrained(args.init_model),
-                # get callable to label mapping
-                label_map=data_module.id_to_label_func(),
-                #label_map=data_module.id_to_label_map_dict(),
-                )
-    elif args.task == "ko-en-translate":
-        # Example 3: Translation
-        """
-        data_module = ...
-        collator = ...
-        """
-        raise NotImplemented
-    else:
-        print('-task option now supported on: nsmc-naive, nsmc-prompted, klue-nli-prompted, klue-ynat-prompted, ...')
-        raise NotImplemented
+    data_module, collator, label_id_map = task_utils.get_task_data(args.task,
+                                                                   args.batch_size,
+                                                                   args.init_model)
+    if data_module is None:
+        raise Exception("invalid -task option argument.")
     # ======================================================
 
     model = ETRIT5ConditionalGenModelLightningModule(

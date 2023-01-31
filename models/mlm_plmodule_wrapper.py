@@ -178,6 +178,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
             batch_in = batch
 
         labels = batch_in["labels"]
+
         if "token_type_ids" in batch_in:
             del batch_in["token_type_ids"]
 
@@ -189,8 +190,8 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         #with open('debug_preds_output.pickle', 'wb') as prd_f:
         #    pickle.dump(output_results, prd_f, pickle.HIGHEST_PROTOCOL)
 
-        labels = [x['labels'] for x in output_results]
-        preds = [x['preds'] for x in output_results]
+        labels = [x['labels'].cpu().detach().numpy() for x in output_results]
+        preds = [x['preds'].cpu().detach().numpy() for x in output_results]
 
         """
         # padding dim 1 with max lengths
@@ -215,17 +216,19 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         prd_texts = self.tknizer.batch_decode(preds, skip_special_tokens=True)
         """
 
-        lbl_texts, prd_texts = [], []
-        print("decode labels...")
-        for lbl_group in tqdm.tqdm(labels):
-            lbl_texts += self.tknizer.batch_decode(lbl_group, skip_special_tokens=True)
-        print("decode preds...")
-        for prd_group in tqdm.tqdm(preds):
-            prd_texts += self.tknizer.batch_decode(prd_group, skip_special_tokens=True)
+        test_helper.INFER_LABELS = labels
+
+        #print("decode labels...")
+        #lbl_texts = []
+        #for lbl_group in tqdm.tqdm(labels):
+        #    lbl_texts += self.tknizer.batch_decode(lbl_group, skip_special_tokens=True)
+        #prd_texts = []
+        #for prd_group in tqdm.tqdm(preds):
+        #    prd_texts += self.tknizer.batch_decode(prd_group, skip_special_tokens=True)
 
         # save preds and labels
-        test_helper.INFER_LABELS= lbl_texts
-        test_helper.INFER_PREDICTIONS = prd_texts
+        #test_helper.INFER_LABELS= lbl_texts
+        test_helper.INFER_PREDICTIONS = preds
         """
         print("save output to inference_*_output.txt")
         with open('inference_preds_output.txt', 'wt') as prd_f:

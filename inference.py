@@ -6,16 +6,15 @@ import random
 import functools
 import argparse
 
-from collections import Counter
 from dataclasses import dataclass
 from datetime import date
 
+import tqdm
 import numpy as np
 import torch
 import torch.nn.functional as F
 import pytorch_lightning as pl
 import evaluate
-import jellyfish
 
 from looseversion import LooseVersion
 from torch import nn
@@ -48,6 +47,9 @@ from datamodules.pawsx_pldm import paws_xDataModule
 from datamodules.kortrain_test import korTrainTextDataModule
 
 from collators import (generic, klue, pawsx)
+
+import task_utils
+
 
 def get_argparser():
     """ generate argument parser. """
@@ -110,61 +112,17 @@ if __name__ == '__main__':
         print("** bfloat16 available: enable bfloat16 training, instead of fp16.")
         precision_arg = "bf16"
 
-    # ================ FIXME for Training ==================
-    if args.task == "nsmc-naive":
-        # NSMC - naive version
-        data_module = NSMCDataModule(batch_size=args.batch_size)
-        collator = generic.GenericDataCollator(input_field_name="document",
-                                               label_field_name="label",
-                                               tokenizer=AutoTokenizer.from_pretrained(args.tokenizer),
-                                               label_map={0: 'positive', 1: 'negative'})
-    elif args.task == "nsmc-prompted":
-        data_module = NSMCDataModule(batch_size=args.batch_size)
-        collator = generic.GenericPromptedDataCollator(input_field_name="document",
-                label_field_name="label",
-                input_template="nsmc sentiment classification: {{ input }}",
-                label_template="{{ label }}",
-                tokenizer=AutoTokenizer.from_pretrained(args.tokenizer),
-                label_map={0:'positive', 1:'negative'})
-    elif args.task == "klue-nli-prompted":
-        # Example 2: KLUE-NLI
-        data_module = KLUENLIDataModule(batch_size=args.batch_size)
-        collator = klue.KLUENLIDataCollator(tokenizer=AutoTokenizer.from_pretrained(args.tokenizer),)
-    elif args.task == "klue-ynat-prompted":
-        # Example: KLUE-YNAT
-        data_module = KLUEYNATDataModule(batch_size=args.batch_size)
-        collator = klue.KLUEYNATDataCollator(tokenizer=AutoTokenizer.from_pretrained(args.tokenizer),)
-    elif args.task == 'kornli-prompted':
-        # Example 3: KorNLI
-        data_module = KorNLIDataModule(batch_size=args.batch_size)
-        collator = klue.KLUENLIDataCollator(tokenizer=AutoTokenizer.from_pretrained(args.tokenizer),)
-    elif args.task == 'paws-x-kor':
-        data_module = paws_xDataModule(batch_size=args.batch_size)
-        collator = pawsx.PAWS_XDataCollator(tokenizer=AutoTokenizer.from_pretrained(args.tokenizer),)
-    elif args.task == 'kr-internal':
-        # Korail, Internal Dataset, Multiclass classification problem.
-        data_module = korTrainTextDataModule(batch_size=args.batch_size)
-        collator = generic.GenericPromptedDataCollator(input_field_name="title",
-                label_field_name="label",
-                input_template="Classification Test:\n\n{{ input }}",
-                label_template="{{ label }}",
-                tokenizer=AutoTokenizer.from_pretrained(args.tokenizer),
-                # Just pass text label into..
-                label_map=data_module.id_to_label_func())
-    elif args.task == "ko-en-translate":
-        # Example 3: Translation
-        """
-        data_module = ...
-        collator = ...
-        """
-        raise NotImplemented
-    else:
-        print('-task option now supported on: nsmc-naive, nsmc-prompted, klue-nli-prompted.')
-        raise NotImplemented
-    # ======================================================
+    # ================ for retrieve task data ==================
+    # 데이터 모듈, 이를 처리하기 위한 collator, 그리고 출력 label-id 를 mapping하는 dict를 받는다
+    data_module, collator, label_id_map = task_utils.get_task_data(args.task,
+                                                                   args.batch_size,
+                                                                   args.tokenizer)
+    if data_module is None:
+        raise Exception("invalid -task option argument.")
+    # ==========================================================
 
     model = ETRIT5ConditionalGenModelLightningModule.load_from_checkpoint(args.model)
-    model.tknizer = AutoTokenizer.from_pretrained(args.tokenizer)
+    model.tknizer = tknizer = AutoTokenizer.from_pretrained(args.tokenizer)
     # set collator
     model.data_collator = collator
 
@@ -182,60 +140,57 @@ if __name__ == '__main__':
             )
     trainer.test(model, datamodule=data_module)
 
-    # correct_pred_labels는 반드시 dict[str, int]가 되어야 함
-    if args.task == "klue-nli-prompted" or args.task == "kornli-prompted":
-        correct_pred_labels = {"entailment":0, "neutral":1, "contradiction":2}
-    elif args.task == "nsmc-naive" or args.task == "nsmc-prompted":
-        correct_pred_labels = {"positive":0, "negative":1}
-    elif args.task == "paws-x-kor":
-        correct_pred_labels = {"different":0, "paraphrase":1}
-    elif args.task == "klue-ynat-prompted":
-        correct_pred_labels = {'IT/science':0, 'economy':1, 'social':2,
-                               'life and culture':3, 'world':4, 'sports':5, 'politics':6}
-    elif args.task == 'kr-internal':
-        correct_pred_labels = data_module.label_to_id_map_dict()
-    else:
-        raise NotImplemented
+    import multiprocessing as mp
+
+    detokenized_preds = []
+    def _decode_a_batch(grp):
+        return tknizer.batch_decode(grp, skip_special_tokens=True)
+
+    with mp.Pool(processes=8) as pool:
+        print("Detokenize Prediction Output.")
+        detokenized_preds = pool.map(_decode_a_batch, test_helper.INFER_PREDICTIONS)
+
+    with mp.Pool(processes=8) as pool:
+        print("Detokenize Gold Lables.")
+        detokenized_lbls = pool.map(_decode_a_batch, test_helper.INFER_LABELS)
+
+    test_helper.INFER_LABELS = [item for sublist in detokenized_lbls for item in sublist]
+    test_helper.INFER_PREDICTIONS = [item for sublist in detokenized_preds for item in sublist]
 
     print(f"# Test Labels: {len(test_helper.INFER_LABELS)}")
     print(f"# Test Predictions: {len(test_helper.INFER_PREDICTIONS)}")
 
     print(f"Predicted Unique labels(will include mis-typed label elements):")
-    cnts = Counter(test_helper.INFER_PREDICTIONS)
-    for k, v in cnts.items():
+    uniq_preds = task_utils.get_unique_labels(test_helper.INFER_PREDICTIONS)
+    for k, v in uniq_preds.items():
         print(f"\tlabel text: [{k}], counts: {v}")
 
-    print("\n* trying to correct mis-typed labels with levenshtein(edit) distance.")
-    correct_map = {}
-    for k in cnts.keys():
-        minimum_dist = 10000
-        lowest_dist_lbl = ''
-        for c in correct_pred_labels.keys():
-            ck_dist = jellyfish.levenshtein_distance(c, k)
-            if minimum_dist > ck_dist:
-                lowest_dist_lbl = c
-                minimum_dist = ck_dist
-        if k != lowest_dist_lbl:
-            correct_map[k] = lowest_dist_lbl
-    if len(correct_map) > 0:
-        print("correction map:")
-        for k, v in correct_map.items():
-            print(f"\t{k} -> {v}")
-        print("\nCORRECTED Uniq Labels and stats:")
-        for idx, v in enumerate(test_helper.INFER_PREDICTIONS):
-            if v in correct_map:
-                test_helper.INFER_PREDICTIONS[idx] = correct_map[v]
-        corr_cnts = Counter(test_helper.INFER_PREDICTIONS)
-        for k, v in corr_cnts.items():
-            print(f"\tlabel text: [{k}], counts: {v}")
+    if label_id_map is not None:
+        print("\n* trying to correct mis-typed labels with levenshtein(edit) distance.")
+        correction_map = task_utils.get_mislabel_correction_map(label_id_map, uniq_preds)
 
+        if len(correction_map) > 0:
+            print("correction map:")
+            for k, v in correction_map.items():
+                print(f"\t{k} -> {v}")
+            print("\nCORRECTED Uniq Labels and stats:")
+            for idx, v in enumerate(test_helper.INFER_PREDICTIONS):
+                if v in correction_map:
+                    test_helper.INFER_PREDICTIONS[idx] = correction_map[v]
+            corr_cnts = Counter(test_helper.INFER_PREDICTIONS)
+            for k, v in corr_cnts.items():
+                print(f"\tlabel text: [{k}], counts: {v}")
+        else:
+            print("** all tag labels are clean, so we don't need correction map. nice! **")
+
+        # label text to label id mapping
+        int_lbls = [label_id_map[x] for x in test_helper.INFER_LABELS]
+        int_preds = [label_id_map[x] for x in test_helper.INFER_PREDICTIONS]
+
+        # then calculate accuracy. FIXME: introduce f1 measure.
+        acc_metric = evaluate.load("accuracy")
+        results = acc_metric.compute(references=int_lbls, predictions=int_preds)
+        print(results)
     else:
-        print("** all tag labels are clean, so we don't need correction map. nice! **")
-
-    int_lbls = [correct_pred_labels[x] for x in test_helper.INFER_LABELS]
-    int_preds = [correct_pred_labels[x] for x in test_helper.INFER_PREDICTIONS]
-
-    acc_metric = evaluate.load("accuracy")
-    results = acc_metric.compute(references=int_lbls, predictions=int_preds)
-    print(results)
+        print("\nWARNING: label-id map dictionary is None, so we cannot evaluate them. see task_utils.py:get_task_data()")
 

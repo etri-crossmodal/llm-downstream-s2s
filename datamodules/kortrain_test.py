@@ -21,13 +21,14 @@ class korTrainTextDataModule(pl.LightningDataModule):
         super(korTrainTextDataModule, self).__init__()
         self.valid_proportion = valid_proportion
         self.batch_size = batch_size
+        self.use_mtl = use_mtl
         return
 
     def prepare_data(self):
         return
 
     def setup(self, stage: str=""):
-        if use_mtl:
+        if self.use_mtl:
             whole_ds = load_from_disk('/home/jhshin/Works/ptlm-downstream-test/kortrain-classifer-test-230117/korail_cls_mtl/')
         else:
             whole_ds = load_from_disk('/home/jhshin/Works/ptlm-downstream-test/kortrain-classifer-test-230117/korail_cls/')
@@ -58,10 +59,12 @@ class korTrainTextDataModule(pl.LightningDataModule):
 
     # label -> id
     def label_to_id_map_dict(self):
+        # use generator expression for lazy evaluation
         return self.l2i
 
     def id_to_label_func(self):
-        return lambda x: self.dataset_train_iter.features['label'].names[x]
+        #return lambda x: self.dataset_train_iter.features['label'].names[x]
+        return lambda x: self.i2l[x]
 
     def label_to_id_func(self):
         return lambda x: self.l2i[x]
