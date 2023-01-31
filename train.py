@@ -118,6 +118,12 @@ if __name__ == '__main__':
     torch.manual_seed(args.seed)
     pl.seed_everything(args.seed)
 
+    base_dirpath = args.save_path
+    log_path = os.path.join(base_dirpath, "lightning_logs")
+    if not os.path.exists(log_path):
+        os.makedirs(log_path)
+    checkpoint_dirpath = os.path.join(base_dirpath, "saved_checkpoints/")
+
     # add Tensorboard logger, w/o hp_metric
     logger = pl.loggers.TensorBoardLogger(base_dirpath,
             name="lightning_logs",
@@ -202,12 +208,6 @@ if __name__ == '__main__':
         learning_rate=args.learning_rate, warmup_steps=args.warmup_steps,
         train_batch_size=args.batch_size, val_batch_size=args.batch_size,
     )
-
-    base_dirpath = args.save_path
-    log_path = os.path.join(base_dirpath, "lightning_logs")
-    if not os.path.exists(log_path):
-        os.makedirs(log_path)
-    checkpoint_dirpath = os.path.join(base_dirpath, "saved_checkpoints/")
 
     # add checkpoint saver
     # 이건 gradient acc때문임: every_n_train_steps * gradient_acc = 실제 저장되는 시점

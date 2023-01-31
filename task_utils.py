@@ -83,6 +83,23 @@ def get_task_data(task_name: str, batch_size: int, tokenizer_str: str):
         # FIXME: 현재는 label을 얻기 위해 data_module.setup()을 호출해야 함.
         data_module.setup()
         gold_labels = data_module.label_to_id_map_dict()
+    elif task_name == 'kr-internal-mtl':
+        # Korail, Internal Dataset, Multiclass classification problem.
+        #data_module = korTrainTextDataModule(batch_size=batch_size)
+        # MTL
+        data_module = korTrainTextDataModule(batch_size=batch_size, use_mtl=True)
+        collator = generic.GenericPromptedDataCollator(input_field_name="title",
+                label_field_name="label",
+                input_template="Multitask classification:\n\n{{ input }}",
+                label_template="{{ label }}",
+                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+                # get callable to label mapping
+                label_map=data_module.id_to_label_func(),
+                #label_map=data_module.id_to_label_map_dict(),
+                )
+        # FIXME: 현재는 label을 얻기 위해 data_module.setup()을 호출해야 함.
+        data_module.setup()
+        gold_labels = data_module.label_to_id_map_dict()
     elif task_name == "ko-en-translate":
         # Example 3: Translation
         """
