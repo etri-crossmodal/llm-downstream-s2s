@@ -1,12 +1,15 @@
 import os
+
 # Disable TF-TRT Warnings, we don't want to use tf2 for tensorboard.
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
+import multiprocessing as mp
 import random
 import functools
 import argparse
 
 from dataclasses import dataclass
+from collections import Counter
 from datetime import date
 
 import tqdm
@@ -91,6 +94,13 @@ if __name__ == '__main__':
     torch.manual_seed(args.seed)
     pl.seed_everything(args.seed)
 
+    accelerator_args = "gpu"
+    accelerator_counts = args.gpus
+
+    if args.gpus <= 0:
+        accelerator_args = "cpu"
+        accelerator_counts = int(len(os.sched_getaffinity(0)) // 1.5)
+
     # 기본적으로 Fused AdamW (DeepSpeed)는 Off, 32bit로 학습
     use_cpu_adam_arg = False
     precision_arg = args.float_precision
@@ -134,13 +144,11 @@ if __name__ == '__main__':
     # gradient accumulation을 사용하면 global_step이 그에 맞게 떨어진다.
     # learning rate scheduler를 위해서, max_epoch을 충분히 크게 잡을 것.
 
-    trainer = pl.Trainer(accelerator="gpu",
-            devices=1, num_nodes=1,
+    trainer = pl.Trainer(accelerator=accelerator_args,
+            devices=accelerator_counts, num_nodes=1,
             precision=precision_arg,
             )
     trainer.test(model, datamodule=data_module)
-
-    import multiprocessing as mp
 
     detokenized_preds = []
     def _decode_a_batch(grp):

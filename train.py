@@ -118,6 +118,13 @@ if __name__ == '__main__':
     torch.manual_seed(args.seed)
     pl.seed_everything(args.seed)
 
+    accelerator_args = "gpu"
+    accelerator_counts = args.gpus
+
+    if args.gpus <= 0:
+        accelerator_args = "cpu"
+        accelerator_counts = int(len(os.sched_getaffinity(0)) // 1.5)
+
     base_dirpath = args.save_path
     log_path = os.path.join(base_dirpath, "lightning_logs")
     if not os.path.exists(log_path):
@@ -246,8 +253,8 @@ if __name__ == '__main__':
     # gradient accumulation을 사용하면 global_step이 그에 맞게 떨어진다.
     # learning rate scheduler를 위해서, max_epoch을 충분히 크게 잡을 것.
 
-    trainer = pl.Trainer(accelerator="gpu",
-            devices=args.gpus,
+    trainer = pl.Trainer(accelerator=accelerator_args,
+            devices=accelerator_counts,
             callbacks=callbacks,
             default_root_dir=base_dirpath,
             logger=logger,
