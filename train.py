@@ -93,7 +93,10 @@ def get_argparser():
     parser.add_argument("-float_precision", type=int, default=32,
                         help="set floating point precision. default value is 32, you can set 16. with value 16, if bf16 supported, bf16 will be enabled automatically.")
     parser.add_argument("-task", type=str, default="nsmc-prompted",
-                        help="set a downstream task. (nsmc-naive|nsmc-prompted|klue-nli-prompted|translate-ko-en)")
+                        help="set a downstream task. (nsmc-naive|nsmc-prompted|"
+                             "klue-nli-prompted|translate-ko-en)")
+    parser.add_argument("-optim", type=str, default="adam",
+                        help="set a optimizer. adam/cpuadam/adafactor")
     return parser
 
 
@@ -137,7 +140,7 @@ if __name__ == '__main__':
             default_hp_metric=False)
 
     # 기본적으로 Fused AdamW (DeepSpeed)는 Off, 32bit로 학습
-    optimizer_arg = "adam"
+    optimizer_arg = args.optim
     precision_arg = args.float_precision
     callbacks = []
 
@@ -197,7 +200,7 @@ if __name__ == '__main__':
             print("** Unknown strategy: set to ddp.")
         strat_instance = "ddp"
         # downstream task이므로 adafactor를 사용
-        optimizer_arg = "adafactor"
+        #optimizer_arg = "adafactor"
 
     # ================ FIXME for Training ==================
     data_module, collator, label_id_map = task_utils.get_task_data(args.task,
