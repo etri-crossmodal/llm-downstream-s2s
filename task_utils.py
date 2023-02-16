@@ -15,7 +15,7 @@ from datamodules.kornli_pldm import KorNLIDataModule
 from datamodules.pawsx_pldm import paws_xDataModule
 from datamodules.kortrain_test import korTrainTextDataModule
 
-from collators import (generic, klue, pawsx)
+from collators import (generic, klue, pawsx, korail_internal)
 
 
 def get_task_data(task_name: str, batch_size: int, tokenizer_str: str):
@@ -71,6 +71,11 @@ def get_task_data(task_name: str, batch_size: int, tokenizer_str: str):
         #data_module = korTrainTextDataModule(batch_size=batch_size)
         # MTL
         data_module = korTrainTextDataModule(batch_size=batch_size, use_mtl=False)
+        collator = korail_internal.korailCollatorV1(
+            tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+            label_map=data_module.id_to_label_func(),
+            length_limit=512)
+        """
         collator = generic.GenericPromptedDataCollator(input_field_name="title",
                 label_field_name="label",
                 input_template="Classification Test:\n\n{{ input }}",
@@ -80,6 +85,7 @@ def get_task_data(task_name: str, batch_size: int, tokenizer_str: str):
                 label_map=data_module.id_to_label_func(),
                 #label_map=data_module.id_to_label_map_dict(),
                 )
+        """
         # FIXME: 현재는 label을 얻기 위해 data_module.setup()을 호출해야 함.
         data_module.setup()
         gold_labels = data_module.label_to_id_map_dict()

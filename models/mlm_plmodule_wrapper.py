@@ -135,6 +135,8 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         if "token_type_ids" in batch_in:
             del batch_in["token_type_ids"]
 
+        #print(batch_in["labels"].cpu().detach())
+
         s2s_lm_out = self(**batch_in)
         loss = s2s_lm_out.loss
         lm_logits = s2s_lm_out.logits
@@ -161,11 +163,10 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         logits = outputs.logits
 
         # 시작은 어차피 258.. 로 시작하므로.
-        #print(f"logit shape: {logits.shape}")
         pred_seq = logits[0:].argmax(2)
         n_words = logits.shape[1]
 
-        self.log("val_loss", val_loss.item(), on_step=True, on_epoch=True, prog_bar=True,
+        self.log("val_loss", val_loss.item(), on_step=False, on_epoch=True, prog_bar=True,
                  logger=True, sync_dist=True, batch_size=self.hparams.val_batch_size)
 
         return { "loss": val_loss, "preds": pred_seq, "labels": labels }
@@ -178,64 +179,20 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
             batch_in = batch
 
         labels = batch_in["labels"]
+        #print(labels.cpu().detach().numpy())
 
         if "token_type_ids" in batch_in:
             del batch_in["token_type_ids"]
 
         outputs = self.model.generate(batch_in['input_ids'], do_sample=False, num_beams=1, max_length=256)
+        #print(outputs.cpu().detach().numpy())
         return { "preds": outputs, "labels": labels }
 
     def test_epoch_end(self, output_results):
-        # output_results = list of {loss, preds, labels}
-        #with open('debug_preds_output.pickle', 'wb') as prd_f:
-        #    pickle.dump(output_results, prd_f, pickle.HIGHEST_PROTOCOL)
-
         labels = [x['labels'].cpu().detach().numpy() for x in output_results]
         preds = [x['preds'].cpu().detach().numpy() for x in output_results]
-
-        """
-        # padding dim 1 with max lengths
-        lbl_max_dim1 = max([x.shape[1] for x in labels])
-        prd_max_dim1 = max([x.shape[1] for x in preds])
-        for idx, x in enumerate(labels):
-            if x.shape[1] != lbl_max_dim1:
-                labels[idx] = torch.nn.functional.pad(x, pad=(0, lbl_max_dim1-x.shape[1]),
-                                                      mode='constant', value=0)
-        for idx, x in enumerate(preds):
-            if x.shape[1] != prd_max_dim1:
-                preds[idx] = torch.nn.functional.pad(x, pad=(0, prd_max_dim1-x.shape[1]),
-                                                      mode='constant', value=0)
-
-        labels = torch.cat(labels)
-        preds = torch.cat(preds)
-
-        self.tknizer = AutoTokenizer.from_pretrained("google/byt5-small")
-        print("decode labels...")
-        lbl_texts = self.tknizer.batch_decode(labels, skip_special_tokens=True)
-        print("decode preds...")
-        prd_texts = self.tknizer.batch_decode(preds, skip_special_tokens=True)
-        """
-
         test_helper.INFER_LABELS = labels
-
-        #print("decode labels...")
-        #lbl_texts = []
-        #for lbl_group in tqdm.tqdm(labels):
-        #    lbl_texts += self.tknizer.batch_decode(lbl_group, skip_special_tokens=True)
-        #prd_texts = []
-        #for prd_group in tqdm.tqdm(preds):
-        #    prd_texts += self.tknizer.batch_decode(prd_group, skip_special_tokens=True)
-
-        # save preds and labels
-        #test_helper.INFER_LABELS= lbl_texts
         test_helper.INFER_PREDICTIONS = preds
-        """
-        print("save output to inference_*_output.txt")
-        with open('inference_preds_output.txt', 'wt') as prd_f:
-            prd_f.write('\n'.join(prd_texts))
-        with open('inference_labels_output.txt', 'wt') as lbl_f:
-            lbl_f.write('\n'.join(lbl_texts))
-        """
 
     def export_hf_model(self, model_save_path):
         """

@@ -10,7 +10,8 @@ import pytorch_lightning as pl
 
 from torch.utils.data import DataLoader
 from transformers import (AutoTokenizer, ByT5Tokenizer)
-from datasets import (DatasetDict, Dataset, load_dataset, interleave_datasets, load_from_disk)
+from datasets import (DatasetDict, Dataset, load_dataset, load_from_disk,
+                      interleave_datasets, concatenate_datasets)
 
 class korTrainTextDataModule(pl.LightningDataModule):
     def __init__(self,
@@ -30,14 +31,24 @@ class korTrainTextDataModule(pl.LightningDataModule):
     def setup(self, stage: str=""):
         if self.use_mtl:
             whole_ds = load_from_disk('/home/jhshin/Works/ptlm-downstream-test/kortrain-classifer-test-230117/korail_cls_mtl/')
+            #whole_ds = load_from_disk('/home/jhshin/Works/ptlm-downstream-test/kortrain-classifer-test-230117/korail_cls_mtl_maindataonly/')
         else:
             whole_ds = load_from_disk('/home/jhshin/Works/ptlm-downstream-test/kortrain-classifer-test-230117/korail_cls/')
+
         self.i2l = {idx: names for idx, names in enumerate(whole_ds['train'].features['label'].names)}
         self.l2i = {names: idx for idx, names in enumerate(whole_ds['train'].features['label'].names)}
 
+        # FIXME: 부서서무|처리과서무 를 undersampling
+        nonmj = whole_ds["train"].filter(lambda ex: ex["label"] != self.l2i['부서서무|처리과서무'])
+        mj = whole_ds["train"].filter(lambda ex: ex["label"] == self.l2i['부서서무|처리과서무'])
+        whole_ds["train"] = concatenate_datasets([nonmj, mj.shard(num_shards=7, index=1)])
+
         # split train into train/valid
-        splitted_ds = whole_ds["train"].train_test_split(test_size=self.valid_proportion,)
-        self.dataset_train_iter = splitted_ds["train"]
+        splitted_ds = whole_ds["train"].train_test_split(test_size=self.valid_proportion,
+                                                         shuffle=True,
+                                                         seed=123456,)
+        #self.dataset_train_iter = splitted_ds["train"].shuffle(seed=98765).shard(num_shards=16, index=2)
+        self.dataset_train_iter = splitted_ds["train"].shuffle(seed=76543).shard(num_shards=2, index=0)
         self.dataset_valid_iter = splitted_ds["test"]
 
         # use validation dataset split as a test
