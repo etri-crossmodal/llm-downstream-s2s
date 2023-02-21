@@ -71,3 +71,4 @@ python inference.py \
   * 학습/테스트/추론을 위한 데이터 연결을 프로그램 실행 인자로 할당하게 바꿔야 함
   * 번역 태스크 구현, 다국어, zero-shot 테스트 등 (e.g. en-jp, trained on ko/en, ko/jp, ko/zh)
   * adafactor 적용, scheduler의 경우 linear decaying 대신 cyclic lr이나 다른걸 사용해야 함 --> (23/01/30) 완료
+  * truncate/discard를 max_seq_length와 결합. max_seq_length가 의도대로 작동하게 수정 필요.

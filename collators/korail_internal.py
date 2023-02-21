@@ -39,11 +39,11 @@ class korailCollatorV1:
             elif isinstance(self.label_map, Callable):
                 label_texts = [self.label_map(x.item()) for x in labels]
             else:
-                raise NotImplemented
+                raise NotImplementedError
 
             #print(f"{input_texts[0]}\n=> {label_texts[0]}")
             return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts, padding='longest', return_tensors="pt"))
         else:
-            raise NotImplemented
+            raise NotImplementedError
 
         return None

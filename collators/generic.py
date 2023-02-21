@@ -43,11 +43,12 @@ class GenericDataCollator:
             elif isinstance(self.label_map, Callable):
                 label_texts = [self.label_map(x.item()) for x in labels]
             else:
-                raise NotImplemented
+                # use as-is
+                label_texts = labels
 
             return BatchEncoding(self.tokenizer(text=input_text, text_target=label_texts, padding="longest", return_tensors="pt"))
         else:
-            raise NotImplemented
+            raise NotImplementedError
 
         return None
 
@@ -93,10 +94,10 @@ class GenericPromptedDataCollator:
             elif isinstance(self.label_map, Callable):
                 label_texts = [lbl_template.render(label=self.label_map.__call__(x.item())) for x in labels]
             else:
-                raise NotImplemented
+                raise NotImplementedError
 
             return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts, padding="longest", return_tensors="pt"))
         else:
-            raise NotImplemented
+            raise NotImplementedError
 
         return None

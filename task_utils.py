@@ -5,6 +5,7 @@
 """
 import jellyfish
 
+from typing import Optional, List
 from collections import Counter
 
 from transformers import AutoTokenizer
@@ -14,11 +15,20 @@ from datamodules.klue_nli_pldm import KLUENLIDataModule, KLUEYNATDataModule
 from datamodules.kornli_pldm import KorNLIDataModule
 from datamodules.pawsx_pldm import paws_xDataModule
 from datamodules.kortrain_test import korTrainTextDataModule
+from datamodules.generic_tsv import GenericTSVDataModule
 
 from collators import (generic, klue, pawsx, korail_internal)
 
 
-def get_task_data(task_name: str, batch_size: int, tokenizer_str: str):
+def get_task_data(task_name: str, batch_size: int,
+                  tokenizer_str: str,
+                  train_data_file: Optional[List]=None,
+                  valid_data_file: Optional[List]=None,
+                  test_data_file: Optional[List]=None,
+                  valid_proportions: float=0.0,
+                  test_proportions: float=0.0,
+                  max_seq_length: int=0,
+                  do_truncate: bool=False):
     """
     태스크에 맞는 lightning datamodule과, collator를 반환합니다.
     collator는 generic collator를 응용하거나, collators/ 디렉터리 아래에
@@ -106,17 +116,19 @@ def get_task_data(task_name: str, batch_size: int, tokenizer_str: str):
         # FIXME: 현재는 label을 얻기 위해 data_module.setup()을 호출해야 함.
         data_module.setup()
         gold_labels = data_module.label_to_id_map_dict()
-    elif task_name == "ko-en-translate":
-        # Example 3: Translation
-        """
-        data_module = ...
-        collator = ...
-        gold_labels = None
-        """
-        raise NotImplemented
     else:
-        print('-task option now supported on: nsmc-naive, nsmc-prompted, klue-nli-prompted, klue-ynat-prompted, ...')
-        raise NotImplemented
+        # generic supervised seq2seq training, with -train_data, -valid_data, -test_data option.
+        data_module = GenericTSVDataModule(batch_size, train_data_file, valid_data_file, test_data_file,
+                                           ["text", "target_text"], "\t",
+                                           valid_proportions, test_proportions,
+                                           max_seq_length,
+                                           AutoTokenizer.from_pretrained(tokenizer_str),
+                                           do_truncate)
+        collator = generic.GenericDataCollator(input_field_name="text",
+                                               label_field_name="target_text",
+                                               tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+                                               label_map=None)
+        gold_labels = None
 
     return data_module, collator, gold_labels
 

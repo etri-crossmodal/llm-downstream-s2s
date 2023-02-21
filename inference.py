@@ -57,21 +57,62 @@ import task_utils
 def get_argparser():
     """ generate argument parser. """
     parser = argparse.ArgumentParser(description="Train T5-like model with pytorch+transformers.")
+    parser.add_argument("-model", type=str, required=True,
+                        help="model(=a checkpoint of ETRIT5ConditionalGenModelLightningModule) "
+                        "path, not huggingface-compatible model filepath.")
     parser.add_argument("-tokenizer", type=str, default="google/byt5-small",
-                        help="set hf tokenizer name or model path.")
+                        help="set hf tokenizer name or model path, "
+                        "because model doesn't have any tokenizer-related information.")
+
+    parser.add_argument("-task", type=str, default="seq2seq",
+                        help="set a downstream task. (seq2seq|nsmc-naive|nsmc-prompted|"
+                        "klue-nli-prompted|translate-ko-en)")
+    parser.add_argument("-train_data", type=str, action='append', required=False,
+                        help="must be provided when you use -task seq2seq option. you can assign "
+                        "huggingface dataset name or dataset path, which reserved by "
+                        "datasets.save_to_disk(), and tabbed text file(.txt|.tsv). "
+                        "you can assign multiple dataset by repeating -data option, "
+                        "they will be concatenated into single dataset. "
+                        "and you can shard a dataset then learn just 1/N samples"
+                        "by appending ':N(N=number)' as suffix.")
+    parser.add_argument("-valid_data", type=str, action='append', required=False,
+                        help="same as -train_data option.")
+    parser.add_argument("-test_data", type=str, action='append', required=False,
+                        help="same as -train_data option.")
+    parser.add_argument("-valid_data_proportions", type=float, default=0.0,
+                        help="when -task seq2seq and no -valid_data, we will create validation data from "
+                        "train data.")
+    parser.add_argument("-test_data_proportions", type=float, default=0.0,
+                        help="when -task seq2seq and no -valid_data, we will create validation data from "
+                        "train data.")
+    parser.add_argument("-max_seq_length", type=int, default=0,
+                        help="set maximum token length of text in given datasets. "
+                        "if example length exceeds, it will be DISCARDED without -do_truncate=True)")
+    parser.add_argument("-do_truncate", type=bool, default=False,
+                        help="If it sets to TRUE, truncate input(not label!) text with max_seq_length. "
+                        "default bahavior=FALSE=just discard when exceeds max_seq_length. "
+                        "however, when label exceeds max_seq_length, we will discard it whatsoever.")
+
+    parser.add_argument("-save_output", type=str, default="",
+                        help="set path for saving predictions.")
+    parser.add_argument("-save_label", type=str, default="",
+                        help="set path for saving gold labels or target texts, if it exists.")
+
     parser.add_argument("-seed", type=int, default=123456,
                         help="set a seed for RNGs. if you assign value below 0(e.g. -1), "
                         "we will randomize seed with secrets.randbelow() function.")
     parser.add_argument("-batch_size", type=int, default=128,
                         help="train/valid data batch size")
-    parser.add_argument("-model", type=str, default="",
-                        help="model path or hf-model name. e.g. google/byt5-small")
     parser.add_argument("-gpus", type=int, default=4,
                         help="number of accelerators(e.g. GPUs) for training.")
     parser.add_argument("-float_precision", type=int, default=32,
                         help="set floating point precision. default value is 32, you can set 16. with value 16, if bf16 supported, bf16 will be enabled automatically.")
-    parser.add_argument("-task", type=str, default="nsmc-prompted",
-                        help="set a downstream task. (nsmc-naive|nsmc-prompted|klue-nli-prompted|translate-ko-en)")
+
+    parser.add_argument("-beam_size", type=int, default=1,
+                        help="beam size for testing/prediction step.")
+    parser.add_argument("-max_predict_length", type=int, default=512,
+                        help="maximum prediction string length.")
+
     return parser
 
 
@@ -126,12 +167,24 @@ if __name__ == '__main__':
     # 데이터 모듈, 이를 처리하기 위한 collator, 그리고 출력 label-id 를 mapping하는 dict를 받는다
     data_module, collator, label_id_map = task_utils.get_task_data(args.task,
                                                                    args.batch_size,
-                                                                   args.tokenizer)
+                                                                   args.tokenizer,
+                                                                   args.train_data,
+                                                                   args.valid_data,
+                                                                   args.test_data,
+                                                                   args.valid_data_proportions,
+                                                                   args.test_data_proportions,
+                                                                   args.max_seq_length,
+                                                                   args.do_truncate)
     if data_module is None:
         raise Exception("invalid -task option argument.")
     # ==========================================================
 
     model = ETRIT5ConditionalGenModelLightningModule.load_from_checkpoint(args.model)
+
+    # override hyperparameter for prediction
+    model.hparams.num_beams_for_test = args.beam_size
+    model.hparams.max_predict_length = args.max_predict_length
+
     model.tknizer = tknizer = AutoTokenizer.from_pretrained(args.tokenizer)
     # set collator
     model.data_collator = collator
@@ -202,4 +255,19 @@ if __name__ == '__main__':
         print(results)
     else:
         print("\nWARNING: label-id map dictionary is None, so we cannot evaluate them. see task_utils.py:get_task_data()")
+
+    if args.save_output != "":
+        with open(args.save_output, "wt") as out_f:
+            for item in test_helper.INFER_PREDICTIONS:
+                out_f.write(item + '\n')
+            out_f.close()
+
+    if args.save_label != "":
+        if test_helper.INFER_LABELS is not None:
+            with open(args.save_label, "wt") as out_f:
+                for item in test_helper.INFER_PREDICTIONS:
+                    out_f.write(item + '\n')
+                out_f.close()
+        else:
+            print("ERROR: -save_label option is not empty, but gold label dataset not found.")
 

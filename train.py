@@ -53,6 +53,35 @@ import task_utils
 def get_argparser():
     """ generate argument parser. """
     parser = argparse.ArgumentParser(description="Train T5-like model with pytorch+transformers.")
+    parser.add_argument("-task", type=str, default="seq2seq",
+                        help="set a downstream task. (nsmc-naive|nsmc-prompted|"
+                             "klue-nli-prompted|translate-ko-en)")
+
+    parser.add_argument("-train_data", type=str, action='append', required=False,
+                        help="must be provided when you use -task seq2seq option. you can assign "
+                        "huggingface dataset name or dataset path, which reserved by datasets.save_to_disk(), and "
+                        "tabbed text file(.txt|.tsv). you can assign multiple dataset by repeating -data option, "
+                        "they will be concatenated into single dataset. "
+                        "and you can shard a dataset then learn just 1/N samples"
+                        "by appending ':N(N=number)' as suffix.")
+    parser.add_argument("-valid_data", type=str, action='append', required=False,
+                        help="same as -train_data option.")
+    parser.add_argument("-test_data", type=str, action='append', required=False,
+                        help="same as -train_data option.")
+    parser.add_argument("-valid_data_proportions", type=float, default=0.0,
+                        help="when -task seq2seq and no -valid_data, we will create validation data from "
+                        "train data.")
+    parser.add_argument("-test_data_proportions", type=float, default=0.0,
+                        help="when -task seq2seq and no -valid_data, we will create validation data from "
+                        "train data.")
+    parser.add_argument("-max_seq_length", type=int, default=0,
+                        help="set maximum token length of text in given datasets. "
+                        "if example length exceeds, it will be DISCARDED without -do_truncate=True)")
+    parser.add_argument("-do_truncate", type=bool, default=False,
+                        help="If it sets to TRUE, truncate input(not label!) text with max_seq_length. "
+                        "default bahavior=FALSE=just discard when exceeds max_seq_length. "
+                        "however, when label exceeds max_seq_length, we will discard it whatsoever.")
+
     parser.add_argument("-seed", type=int, default=123456,
                         help="set a seed for RNGs. if you assign value below 0(e.g. -1), "
                         "we will randomize seed with secrets.randbelow() function.")
@@ -66,9 +95,6 @@ def get_argparser():
                         "another pretrained model. e.g. google/byt5-small")
     parser.add_argument("-resume_checkpoint", type=str, default="",
                         help="resume training with given checkpoint directory.")
-    parser.add_argument("-max_seq_length", type=int, default=1024,
-                        help="set maximum length of text in given datasets. "
-                        "if example length exceeds, it will be discarded (WARNING: not truncated)")
     parser.add_argument("-grad_acc", type=int, default=1,
                         help="gradient accumulation to increase effective batch size.")
     parser.add_argument("-max_epoch", type=int, default=4,
@@ -92,9 +118,6 @@ def get_argparser():
                         help="DDP training strats. can be one of (fsdp_native_cpu_offload|deepspeed_2_optim_offload|deepspeed_3_full|ddp)")
     parser.add_argument("-float_precision", type=int, default=32,
                         help="set floating point precision. default value is 32, you can set 16. with value 16, if bf16 supported, bf16 will be enabled automatically.")
-    parser.add_argument("-task", type=str, default="nsmc-prompted",
-                        help="set a downstream task. (nsmc-naive|nsmc-prompted|"
-                             "klue-nli-prompted|translate-ko-en)")
     parser.add_argument("-optim", type=str, default="adam",
                         help="set a optimizer. adam/cpuadam/adafactor")
     return parser
@@ -103,6 +126,9 @@ def get_argparser():
 if __name__ == '__main__':
     parser = get_argparser()
     args = parser.parse_args()
+
+    if args.task == "seq2seq" and (args.train_data is None or len(args.train_data) == 0):
+        raise Exception("you must assign -data option when -task seq2seq.")
 
     if args.config_path == "" and args.init_model == "":
         raise Exception("assign -config_path or -init_model to define a model. "
@@ -205,7 +231,14 @@ if __name__ == '__main__':
     # ================ FIXME for Training ==================
     data_module, collator, label_id_map = task_utils.get_task_data(args.task,
                                                                    args.batch_size,
-                                                                   args.init_model)
+                                                                   args.init_model,
+                                                                   args.train_data,
+                                                                   args.valid_data,
+                                                                   args.test_data,
+                                                                   args.valid_data_proportions,
+                                                                   args.test_data_proportions,
+                                                                   args.max_seq_length,
+                                                                   args.do_truncate)
     if data_module is None:
         raise Exception("invalid -task option argument.")
     # ======================================================

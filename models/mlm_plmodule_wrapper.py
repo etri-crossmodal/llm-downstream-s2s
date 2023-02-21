@@ -44,6 +44,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
                  learning_rate: float=1e-3, warmup_steps: int=0,
                  weight_decay: float=0.0, adam_epsilon: float=1e-8,
                  train_batch_size: int=256, val_batch_size: int=32,
+                 num_beams_for_test: int=1, max_predict_length: int=512,
                  **kwargs):
         super(ETRIT5ConditionalGenModelLightningModule, self).__init__()
         self.save_hyperparameters(ignore=['data_collator',])
@@ -178,19 +179,28 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         else:
             batch_in = batch
 
-        labels = batch_in["labels"]
+        if "labels" in batch_in:
+            labels = batch_in["labels"]
+        else:
+            labels = None
         #print(labels.cpu().detach().numpy())
 
         if "token_type_ids" in batch_in:
             del batch_in["token_type_ids"]
 
-        outputs = self.model.generate(batch_in['input_ids'], do_sample=False, num_beams=1, max_length=256)
+        outputs = self.model.generate(batch_in['input_ids'], do_sample=False,
+                                      num_beams=self.hparams.num_beams_for_test,
+                                      max_length=self.hparams.max_predict_length)
         #print(outputs.cpu().detach().numpy())
         return { "preds": outputs, "labels": labels }
 
     def test_epoch_end(self, output_results):
-        labels = [x['labels'].cpu().detach().numpy() for x in output_results]
+        if output_results[0]['labels'] is not None:
+            labels = [x['labels'].cpu().detach().numpy() for x in output_results]
+        else:
+            labels = None
         preds = [x['preds'].cpu().detach().numpy() for x in output_results]
+
         test_helper.INFER_LABELS = labels
         test_helper.INFER_PREDICTIONS = preds
 
