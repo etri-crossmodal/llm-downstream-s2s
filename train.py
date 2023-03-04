@@ -6,49 +6,31 @@
 
     Copyright (C) 2022~ ETRI Language Intelligence Research Section, Jong-hun Shin.
 """
-
 import os
-# Disable TF-TRT Warnings, we don't want to use tf2 for tensorboard.
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
 import random
 import functools
 import argparse
 
-from dataclasses import dataclass
-from datetime import date
-
 import numpy as np
 import torch
-import torch.nn.functional as F
 import pytorch_lightning as pl
-
-from looseversion import LooseVersion
-from torch import nn
-from torch.utils.data import DataLoader
+import task_utils
 
 from torch.distributed.fsdp.wrap import (transformer_auto_wrap_policy)
 from transformers.models.t5.modeling_t5 import T5Block
-
-from transformers import (
-    AutoConfig, BertModel,
-    AutoTokenizer,
-)
-from datasets import (load_from_disk, load_dataset, DatasetDict)
 from pytorch_lightning.strategies import DeepSpeedStrategy
-from pytorch_lightning.callbacks import Callback, ModelCheckpoint, LearningRateMonitor
-from pytorch_lightning.utilities import rank_zero
-
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 # we need pytorch 1.12+
 from pytorch_lightning.strategies import DDPFullyShardedNativeStrategy
 from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
-#from torch.distributed.fsdp import (FullyShardedDataParallel as FSDP,
-#        FullStateDictConfig, StateDictType, MixedPrecision)
+from looseversion import LooseVersion
 
 
 from models.mlm_plmodule_wrapper import ETRIT5ConditionalGenModelLightningModule
 
-import task_utils
+
+# Disable TF-TRT Warnings, we don't want to use tf2 for tensorboard.
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 def get_argparser():
     """ generate argument parser. """
@@ -59,8 +41,9 @@ def get_argparser():
 
     parser.add_argument("-train_data", type=str, action='append', required=False,
                         help="must be provided when you use -task seq2seq option. you can assign "
-                        "huggingface dataset name or dataset path, which reserved by datasets.save_to_disk(), and "
-                        "tabbed text file(.txt|.tsv). you can assign multiple dataset by repeating -data option, "
+                        "huggingface dataset name or dataset path, which reserved by "
+                        "datasets.save_to_disk(), and tabbed text file(.txt|.tsv). "
+                        "you can assign multiple dataset by repeating -data option, "
                         "they will be concatenated into single dataset. "
                         "and you can shard a dataset then learn just 1/N samples"
                         "by appending ':N(N=number)' as suffix.")
@@ -115,11 +98,16 @@ def get_argparser():
     parser.add_argument("-gpus", type=int, default=2,
                         help="number of accelerators(e.g. GPUs) for training.")
     parser.add_argument("-strategy", type=str, default="ddp",
-                        help="DDP training strats. can be one of (fsdp_native_cpu_offload|deepspeed_2_optim_offload|deepspeed_3_full|ddp)")
+                        help="DDP training strats. can be one of (fsdp_native_cpu_offload|"
+                        "deepspeed_2_optim_offload|deepspeed_3_full|ddp)")
     parser.add_argument("-float_precision", type=int, default=32,
-                        help="set floating point precision. default value is 32, you can set 16. with value 16, if bf16 supported, bf16 will be enabled automatically.")
+                        help="set floating point precision. default value is 32, "
+                        "you can set 16, and if bf16 supported, bf16 will be enabled automatically.")
     parser.add_argument("-optim", type=str, default="adam",
                         help="set a optimizer. adam/cpuadam/adafactor")
+    parser.add_argument("-tuning_method", type=str, default="finetune",
+                        help="EXPERIMENTAL: use for parameter-efficient fine-tuning."
+                        "you can use one of [lora/prefixtuning/finetune]")
     return parser
 
 
@@ -128,13 +116,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.task == "seq2seq" and (args.train_data is None or len(args.train_data) == 0):
-        raise Exception("you must assign -data option when -task seq2seq.")
+        raise ValueError("you must assign -data option when -task seq2seq.")
 
     if args.config_path == "" and args.init_model == "":
-        raise Exception("assign -config_path or -init_model to define a model. "
+        raise ValueError("assign -config_path or -init_model to define a model. "
                         "e.g. -init_model google/byt5-small")
     elif args.config_path != "" and args.init_model != "":
-        raise Exception("use -config_path or -init_model exclusively. do not use them both.")
+        raise ValueError("use -config_path or -init_model exclusively. do not use them both.")
 
     if args.seed < 0:
         # python 3.6 or more needed to use secrets
@@ -158,6 +146,12 @@ if __name__ == '__main__':
     log_path = os.path.join(base_dirpath, "lightning_logs")
     if not os.path.exists(log_path):
         os.makedirs(log_path)
+
+    # huggingface datasets를 위한 cache_dir을 model-specific하게 다룰 수 있도록 함.
+    hf_cache_path = os.path.join(base_dirpath, "hf_datasets_cache")
+    if not os.path.exists(hf_cache_path):
+        os.makedirs(hf_cache_path)
+
     checkpoint_dirpath = os.path.join(base_dirpath, "saved_checkpoints/")
 
     # add Tensorboard logger, w/o hp_metric
@@ -171,14 +165,15 @@ if __name__ == '__main__':
     callbacks = []
 
     if precision_arg != 32 and precision_arg != 16:
-        raise Exception("bad argument: you can assign 32 or 16 for -float_precision")
+        raise ValueError("bad argument: you can assign 32 or 16 for -float_precision")
 
     bf16_ready = (torch.version.cuda and torch.cuda.is_bf16_supported()
             and LooseVersion(torch.version.cuda) >= "11.0"
             and torch.distributed.is_nccl_available())
 
     if bf16_ready and precision_arg == 32:
-        print("NOTICE: This CUDA GPU supports bfloat16 precision. We suggest you use '-float_precision 16' for faster training.")
+        print("NOTICE: This CUDA GPU supports bfloat16 precision. "
+              "We suggest you use '-float_precision 16' for faster training.")
         # FIXME: avaliable if rank 0
         #input("Press Enter to continue...")
 
@@ -188,7 +183,7 @@ if __name__ == '__main__':
         precision_arg = "bf16"
 
     if args.strategy == "fsdp_native_cpu_offload":
-        raise Exception("ERROR: Not working properly, need to FIX; disabled for now.")
+        raise NotImplementedError("ERROR: Not working properly, need to FIX; disabled for now.")
         print("** Strategy: fsdp_native+cpu offload")
         t5_auto_wrap_policy = functools.partial(
                 transformer_auto_wrap_policy,
@@ -229,18 +224,18 @@ if __name__ == '__main__':
         #optimizer_arg = "adafactor"
 
     # ================ FIXME for Training ==================
-    data_module, collator, label_id_map = task_utils.get_task_data(args.task,
-                                                                   args.batch_size,
-                                                                   args.init_model,
-                                                                   args.train_data,
-                                                                   args.valid_data,
-                                                                   args.test_data,
-                                                                   args.valid_data_proportions,
-                                                                   args.test_data_proportions,
-                                                                   args.max_seq_length,
-                                                                   args.do_truncate)
+    # FIXME: task config를 별도로 두도록 하여 인자 수를 간소화하고,
+    # 확장성을 확보해야 함
+    data_module, collator, label_id_map = task_utils.get_task_data(
+        args.task, args.batch_size, args.init_model,
+        args.train_data, args.valid_data, args.test_data,
+        args.valid_data_proportions, args.test_data_proportions,
+        args.max_seq_length, args.do_truncate,
+        hf_cache_path,
+    )
+
     if data_module is None:
-        raise Exception("invalid -task option argument.")
+        raise ValueError("invalid -task option argument.")
     # ======================================================
 
     model = ETRIT5ConditionalGenModelLightningModule(
@@ -250,11 +245,11 @@ if __name__ == '__main__':
         optimizer=optimizer_arg,
         learning_rate=args.learning_rate, warmup_steps=args.warmup_steps,
         train_batch_size=args.batch_size, val_batch_size=args.batch_size,
+        tuning_method=args.tuning_method,
     )
 
     # add checkpoint saver
     # 이건 gradient acc때문임: every_n_train_steps * gradient_acc = 실제 저장되는 시점
-    # FIXME: every_n_train_steps를 외부에서 결정할 수 있게.
     if args.save_every > 0:
         checkpoint_cb = ModelCheckpoint(dirpath=checkpoint_dirpath,
                 filename='{epoch}-{step}',
@@ -262,8 +257,10 @@ if __name__ == '__main__':
                 # 'global_step'은 매뉴얼과 달리 올바르게 monitoring 되지 않는다. 사용하지 말것
                 monitor="step",
                 mode="max",
-                every_n_train_steps=args.save_every,  # -save_every(=150) * grad_acc(=32) = save checkpoints every 4800 steps
-                every_n_epochs=None,        # every_n_train_steps/every_n_epochs/train_time_interval must be exclusive
+                # -save_every(=150) * grad_acc(=32) = save checkpoints every 4800 steps
+                every_n_train_steps=args.save_every,
+                # every_n_train_steps/every_n_epochs/train_time_interval must be exclusive
+                every_n_epochs=None,
                 train_time_interval=None,
                 verbose=True)
         callbacks.append(checkpoint_cb)
@@ -277,7 +274,7 @@ if __name__ == '__main__':
             verbose=True)
     callbacks.append(checkpoint_cb_by_ep)
 
-    # add Learning Rate Monitor - FIXME: not working
+    # add Learning Rate Monitor
     lr_mon = LearningRateMonitor(logging_interval=None)
     callbacks.append(lr_mon)
 
@@ -310,6 +307,15 @@ if __name__ == '__main__':
         trainer.fit(model, datamodule=data_module)
 
     # 실험을 중단해야 할 때 마지막으로 사용하는 것. Deepspeed 사용 시 신뢰해서는 안됨
-    print("Now we trying to save fallback checkpoint to 'save_checkpoint_fallback.pt'. please wait for a while")
-    trainer.save_checkpoint(base_dirpath + "/save_checkpoint_fallback.pt")
-    print("Fallback checkpoint was saved.")
+    if trainer.state.status == "interrupted":
+        print("Now we trying to save fallback checkpoint to 'save_checkpoint_fallback.pt'. "
+              "please wait for a while")
+        trainer.save_checkpoint(base_dirpath + "/save_checkpoint_fallback.pt")
+        print("Fallback checkpoint was saved.")
+
+    if args.tuning_method != 'finetune':
+        # PEFT를 썼으면 바로 모델을 export 할 것.
+        print("Trained With Parameter-Efficient Fine-Tuning, save adapter checkpoint.")
+        model.export_hf_model(args.save_path.rstrip('/\\') + '_adapter_ckpt')
+    else:
+        model.export_hf_model(args.save_path.rstrip('/\\') + '_hfmodel')

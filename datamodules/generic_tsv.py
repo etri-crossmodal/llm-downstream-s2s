@@ -38,6 +38,7 @@ class GenericTSVDataModule(pl.LightningDataModule):
                  max_seq_length: int=0,
                  tokenizer: Optional[Callable]=None,
                  do_truncate: bool=False,
+                 hf_cache_dir: Optional[str]=None,
                  **kwargs):
         """
         입력:
@@ -70,6 +71,7 @@ class GenericTSVDataModule(pl.LightningDataModule):
         self.max_seq_length = max_seq_length
         self.tokenizer = tokenizer
         self.do_truncate = do_truncate
+        self.hf_cache_dir = hf_cache_dir
 
         return
 
@@ -79,7 +81,7 @@ class GenericTSVDataModule(pl.LightningDataModule):
 
     def _get_dataset_from_files(self, filelist: List[str]):
         """
-        FIXME: preprocessed huggingface datasets를 받을 경우, bypass 해야 함
+        파일 인자 목록으로 부터 datasets 인스턴스를 생성.
         """
         dss = []
         column_len = len(self.column_map)
@@ -101,33 +103,28 @@ class GenericTSVDataModule(pl.LightningDataModule):
                                 for clid, data in enumerate(alist):
                                     datadict[self.column_map[clid]].append(data)
                             else:
-                                print(f"WARNING: in {a_file}, invalid line found. skip line: #{linecnt+1}, {len(alist)-1} delimiter found.")
+                                print(f"WARNING: in {a_file}, invalid line found. "
+                                      f"skip line: #{linecnt+1}, {len(alist)-1} delimiter found.")
                             linecnt += 1
                     dss.append(datasets.Dataset.from_dict(datadict))
                 elif pif.exists() and pif.is_dir():
                     # open with load_from_disk()
-                    try:
-                        print("trying to load with datasets.load_from_disk()")
-                        dsi = datasets.load_from_disk(a_file)
-                        if isinstance(dsi, datasets.DatasetDict):
-                            for dselem in dsi.values():
-                                dss.append(dselem)
-                        elif isinstance(dsi, datasets.Dataset):
-                            dss.append(dsi)
-                    except BaseException as e:
-                        raise e
+                    print("trying to load with datasets.load_from_disk()")
+                    dsi = datasets.load_from_disk(a_file)
+                    if isinstance(dsi, datasets.DatasetDict):
+                        for dselem in dsi.values():
+                            dss.append(dselem)
+                    elif isinstance(dsi, datasets.Dataset):
+                        dss.append(dsi)
                 else:
                     # 수정 필요: 분명히 column name이 다를텐데...
                     print("path doesn't exists, so trying to load with datasets.load_dataset()")
-                    try:
-                        dsi = datasets.load_dataset(a_file)
-                        if isinstance(dsi, datasets.DatasetDict):
-                            for dselem in dsi.values():
-                                dss.append(dselem)
-                        elif isinstance(dsi, datasets.Dataset):
-                            dss.append(dsi)
-                    except BaseException as e:
-                        raise e
+                    dsi = datasets.load_dataset(a_file, cache_dir=self.hf_cache_dir)
+                    if isinstance(dsi, datasets.DatasetDict):
+                        for dselem in dsi.values():
+                            dss.append(dselem)
+                    elif isinstance(dsi, datasets.Dataset):
+                        dss.append(dsi)
         else:
             return None
 
@@ -157,7 +154,7 @@ class GenericTSVDataModule(pl.LightningDataModule):
             self.dataset_valid_iter = tv_split["test"]
 
         if self.max_seq_length > 0:
-            print(f"max sequence length: {self.max_seq_length} > 0, extra processing is begun.")
+            print(f"max sequence length: {self.max_seq_length} > 0, now starts filtering by length.")
             def check_length_func(x, tokenizer, limit):
                 if tokenizer is None:
                     return sum([len(y) for y in x.values()]) < limit

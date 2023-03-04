@@ -15,11 +15,13 @@ class PAWS_XDataCollator:
     sent1_field_name: str="sentence1"
     sent2_field_name: str="sentence2"
     label_field_name: str="label"
-    tokenizer: Optional[Callable]=field(default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small", return_tensors="pt"))
+    tokenizer: Optional[Callable]=field(
+        default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small", return_tensors="pt"))
     # 0: 같지 않음, 1: 같음
-    label_map: Union[Dict[Any, str], Callable[Any,Any]]=field(default_factory=lambda: {0:'different', 1:'paraphrase'})
+    label_map: Union[Dict[Any, str], Callable[Any,Any]]=field(
+        default_factory=lambda: {0:'different', 1:'paraphrase'})
 
-    def __call__(self, examples: dict[str, Any]) -> dict[str, Any]:
+    def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(examples, dict):
             sent1s = examples[self.sent1_field_name]
             sent2s = examples[self.sent2_field_name]
@@ -38,7 +40,8 @@ class PAWS_XDataCollator:
             else:
                 raise NotImplementedError
 
-            return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts, padding='longest', return_tensors="pt"))
+            return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
+                                                padding='longest', return_tensors="pt"))
         else:
             raise NotImplementedError
 

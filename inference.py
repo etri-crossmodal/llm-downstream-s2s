@@ -106,11 +106,12 @@ def get_argparser():
     parser.add_argument("-gpus", type=int, default=4,
                         help="number of accelerators(e.g. GPUs) for training.")
     parser.add_argument("-float_precision", type=int, default=32,
-                        help="set floating point precision. default value is 32, you can set 16. with value 16, if bf16 supported, bf16 will be enabled automatically.")
+                        help="set floating point precision. default value is 32, you can set 16. "
+                        "if you set to 16 and bf16 supported, bf16 will be enabled automatically.")
 
     parser.add_argument("-beam_size", type=int, default=1,
                         help="beam size for testing/prediction step.")
-    parser.add_argument("-max_predict_length", type=int, default=512,
+    parser.add_argument("-max_predict_length", type=int, default=128,
                         help="maximum prediction string length.")
 
     return parser
@@ -155,7 +156,8 @@ if __name__ == '__main__':
             and torch.distributed.is_nccl_available())
 
     if bf16_ready and precision_arg == 32:
-        print("NOTICE: This CUDA GPU supports bfloat16 precision. We suggest you use '-float_precision 16' for faster inference.")
+        print("NOTICE: This CUDA GPU supports bfloat16 precision. "
+              "We suggest you use '-float_precision 16' for faster inference.")
         #input("Press Enter to continue...")
 
     # we should use CPU adamW for deepspeed
@@ -205,7 +207,7 @@ if __name__ == '__main__':
 
     detokenized_preds = []
     def _decode_a_batch(grp):
-        return tknizer.batch_decode(grp, skip_special_tokens=True)
+        return tknizer.batch_decode(grp, skip_special_tokens=True,)
 
     # use half of available cores.
     effective_cpu_cnts = len(os.sched_getaffinity(0))//2
@@ -254,7 +256,8 @@ if __name__ == '__main__':
         results = acc_metric.compute(references=int_lbls, predictions=int_preds)
         print(results)
     else:
-        print("\nWARNING: label-id map dictionary is None, so we cannot evaluate them. see task_utils.py:get_task_data()")
+        print("\nWARNING: label-id map dictionary is None, so we cannot evaluate them. "
+              "see task_utils.py:get_task_data()")
 
     if args.save_output != "":
         with open(args.save_output, "wt") as out_f:

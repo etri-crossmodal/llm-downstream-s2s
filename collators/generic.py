@@ -25,15 +25,18 @@ class GenericDataCollator:
     # dataclass definitions
     input_field_name: str
     label_field_name: str
-    tokenizer: Optional[Callable]=field(default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small", return_tensors="pt"))
+    tokenizer: Optional[Callable]=field(
+        default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small", return_tensors="pt"))
     label_map: Union[Dict[Any, str], Callable]=field(default_factory=lambda: { 0: "긍정", 1: "부정" })
 
-    def __call__(self, examples: dict[str, Any]) -> dict[str, Any]:
+    def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
         """
-        출력 형식 - Dict, { 'input_ids': ndarray-like, 'attention_mask': ndarray-like, 'labels': ndarray-like }
+        출력 형식 - Dict, { 'input_ids': ndarray-like, 'attention_mask': ndarray-like,
+                            'labels': ndarray-like
+                          }
         """
         if isinstance(examples, dict):
-            # 보통의 DataLoader() iterator는 dict[str, list[Any]]를 전달한다
+            # 보통의 DataLoader() iterator는 Dict[str, list[Any]]를 전달한다
             input_text = examples[self.input_field_name]
             labels = examples[self.label_field_name]
 
@@ -46,7 +49,8 @@ class GenericDataCollator:
                 # use as-is
                 label_texts = labels
 
-            return BatchEncoding(self.tokenizer(text=input_text, text_target=label_texts, padding="longest", return_tensors="pt"))
+            return BatchEncoding(self.tokenizer(text=input_text, text_target=label_texts,
+                                                padding="longest", return_tensors="pt"))
         else:
             raise NotImplementedError
 
@@ -66,15 +70,16 @@ class GenericPromptedDataCollator:
     input_template: str="아래 문장에서 나타나는 감정을 '긍정' 또는 '부정'으로 분류하시오:\n\n{{ input }}"
     label_template: str="(긍정/부정) => {{ label }}"
     examples_field_name: Optional[str]=None
-    tokenizer: Optional[Callable]=field(default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small"))
+    tokenizer: Optional[Callable]=field(
+        default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small"))
     label_map: Optional[Union[Dict[Any, str], Callable]]=field(default_factory=lambda: { 0: "긍정", 1: "부정" })
 
-    def __call__(self, examples: dict[str, Any]) -> dict[str, Any]:
+    def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
         """
         출력 형식 - Dict, { 'input_ids': ndarray-like, 'attention_mask': ndarray-like, 'labels': ndarray-like }
         """
         if isinstance(examples, dict):
-            # 보통의 DataLoader() iterator는 dict[str, list[Any]]를 전달한다
+            # 보통의 DataLoader() iterator는 Dict[str, list[Any]]를 전달한다
             input_text = examples[self.input_field_name]
             labels = examples[self.label_field_name]
 
@@ -96,7 +101,8 @@ class GenericPromptedDataCollator:
             else:
                 raise NotImplementedError
 
-            return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts, padding="longest", return_tensors="pt"))
+            return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
+                                                padding="longest", return_tensors="pt"))
         else:
             raise NotImplementedError
 

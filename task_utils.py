@@ -28,7 +28,8 @@ def get_task_data(task_name: str, batch_size: int,
                   valid_proportions: float=0.0,
                   test_proportions: float=0.0,
                   max_seq_length: int=0,
-                  do_truncate: bool=False):
+                  do_truncate: bool=False,
+                  hf_cache_dir: Optional[str]=None):
     """
     태스크에 맞는 lightning datamodule과, collator를 반환합니다.
     collator는 generic collator를 응용하거나, collators/ 디렉터리 아래에
@@ -123,7 +124,8 @@ def get_task_data(task_name: str, batch_size: int,
                                            valid_proportions, test_proportions,
                                            max_seq_length,
                                            AutoTokenizer.from_pretrained(tokenizer_str),
-                                           do_truncate)
+                                           do_truncate,
+                                           hf_cache_dir=hf_cache_dir)
         collator = generic.GenericDataCollator(input_field_name="text",
                                                label_field_name="target_text",
                                                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
@@ -133,7 +135,7 @@ def get_task_data(task_name: str, batch_size: int,
     return data_module, collator, gold_labels
 
 
-def get_unique_labels(labels: list[str]):
+def get_unique_labels(labels: List[str]):
     cnts = Counter(labels)
     return cnts
 

@@ -30,10 +30,13 @@ class korTrainTextDataModule(pl.LightningDataModule):
 
     def setup(self, stage: str=""):
         if self.use_mtl:
-            whole_ds = load_from_disk('/home/jhshin/Works/ptlm-downstream-test/kortrain-classifer-test-230117/korail_cls_mtl/')
-            #whole_ds = load_from_disk('/home/jhshin/Works/ptlm-downstream-test/kortrain-classifer-test-230117/korail_cls_mtl_maindataonly/')
+            whole_ds = load_from_disk('/home/jhshin/Works/ptlm-downstream-test/'
+                                      'kortrain-classifer-test-230117/korail_cls_mtl/')
+            #whole_ds = load_from_disk('/home/jhshin/Works/ptlm-downstream-test/'
+            #                          'kortrain-classifer-test-230117/korail_cls_mtl_maindataonly/')
         else:
-            whole_ds = load_from_disk('/home/jhshin/Works/ptlm-downstream-test/kortrain-classifer-test-230117/korail_cls/')
+            whole_ds = load_from_disk('/home/jhshin/Works/ptlm-downstream-test/'
+                                      'kortrain-classifer-test-230117/korail_cls/')
 
         self.i2l = {idx: names for idx, names in enumerate(whole_ds['train'].features['label'].names)}
         self.l2i = {names: idx for idx, names in enumerate(whole_ds['train'].features['label'].names)}

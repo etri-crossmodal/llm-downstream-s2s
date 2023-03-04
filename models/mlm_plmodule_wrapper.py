@@ -25,8 +25,11 @@ from transformers.optimization import (Adafactor, AdafactorSchedule)
 
 from deepspeed.ops.adam import FusedAdam, DeepSpeedCPUAdam
 from pytorch_lightning.utilities.deepspeed import convert_zero_checkpoint_to_fp32_state_dict
+from peft import (get_peft_config, get_peft_model,
+                  LoraConfig, PrefixTuningConfig,
+                  TaskType)
 
-from . import test_helper
+from models import test_helper
 
 
 class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
@@ -45,9 +48,16 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
                  weight_decay: float=0.0, adam_epsilon: float=1e-8,
                  train_batch_size: int=256, val_batch_size: int=32,
                  num_beams_for_test: int=1, max_predict_length: int=512,
+                 tuning_method: str="finetune",
                  **kwargs):
         super(ETRIT5ConditionalGenModelLightningModule, self).__init__()
         self.save_hyperparameters(ignore=['data_collator',])
+        self.peft_config = None
+
+        if tuning_method not in ['lora', 'prefixtuning', 'finetune']:
+            print(f"WARNING: tuning_method '{tuning_method}'. override to 'finetune' automatically.")
+            tuning_method = 'finetune'
+            self.hparams.tuning_method = 'finetune'
 
         if hf_config_path != "":
             model_cfg = AutoConfig.from_pretrained(hf_config_path)
@@ -57,7 +67,37 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
             #self.model = T5ForConditionalGeneration.from_pretrained(model_or_path)
             self.model = AutoModelForSeq2SeqLM.from_pretrained(model_or_path)
         else:
-            raise Exception("assign hf_config_path or model_or_path parameters to initialize model.")
+            raise ValueError("assign hf_config_path or model_or_path parameters to initialize model.")
+
+        if self.hparams.tuning_method == "lora":
+            # LoRA: arXiv:2106.09685
+            self.peft_config = LoraConfig(
+                task_type=TaskType.SEQ_2_SEQ_LM, inference_mode=False, r=16,
+                target_modules=["q", "v"], lora_alpha=32, lora_dropout=0.01)
+            self.model = get_peft_model(self.model, self.peft_config)
+            print(f"* NOTICE: Parameter-Efficient Fine Tuning mode enabled to "
+                  f"{self.hparams.tuning_method}.")
+            self.model.print_trainable_parameters()
+        elif self.hparams.tuning_method == 'prefixtuning':
+            # P-Tuning v2: arXiv:2110.07602, successor of P-Tuning(Liu et al., 2021)
+            # num_virtual_tokens must be changed with task setting.
+            # see Appendix B. Prompt Length part of the paper.
+            raise NotImplementedError("NOT WORKING: dimension mismatch when forward(). "
+                                      "just use -tuning_method=lora.")
+            self.peft_config = PrefixTuningConfig(peft_type="PREFIX_TUNING",
+                                                  task_type=TaskType.SEQ_2_SEQ_LM,
+                                                  inference_mode=False,
+                                                  num_virtual_tokens=20,
+                                                  token_dim=self.model.config.d_model,
+                                                  num_transformer_submodules=1,
+                                                  num_attention_heads=self.model.config.num_heads,
+                                                  num_layers=self.model.config.num_layers,
+                                                  encoder_hidden_size=self.model.config.d_model,
+                                                  prefix_projection=True,)
+            self.model = get_peft_model(self.model, self.peft_config)
+            print(f"* NOTICE: Parameter-Efficient Fine Tuning mode enabled to "
+                  f"{self.hparams.tuning_method}.")
+            self.model.print_trainable_parameters()
 
         self.data_collator = data_collator
         self.acc_metric = evaluate.load("accuracy")
@@ -76,11 +116,10 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         """ Prepare optimizer and scheduler.
 
         AdamW와 Adafactor를 사용하여 학습 가능하며, AdamW를 사용하는 경우,
-        Weight decay를 bias와 layernorm에는 적용하지 않도록 수정해야 한다. (huggingface transformers의 flax mlm 구현체에서 확인)
+        Weight decay를 bias와 layernorm에는 적용하지 않도록 수정해야 한다.
+        (huggingface transformers의 flax mlm 구현체에서 확인)
 
         scheduler는 linear warmup-linear decay로 구현되어 있었다.
-
-        # FIXME: adafactor optimizer가 LM 학습에 더 도움이 되는지 확인하고, 구현 추가 필요함
         """
         # auto-wrapped model이 될 가능성을 위해, model을 다시 본다.
         model = self.trainer.model
@@ -98,11 +137,14 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
             },
         ]
 
-        # FIXME: dutch T5 학습에는 Adafactor + LR 5e-3을 선택. bfloat16을 쓸 수 있는 환경이라면 고려해보자.
+        # NOTICE: dutch T5 학습에는 Adafactor + LR 5e-3을 선택.
         # 일단은 deepspeed FusedAdam (W_mode=true)을 선택적으로 쓸 수 있게.
         if self.hparams.optimizer == "cpuadam":
-            #optimizer = FusedAdam(optim_group_params, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon,)
-            optimizer = DeepSpeedCPUAdam(optim_group_params, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon,)
+            #optimizer = FusedAdam(optim_group_params,
+            #                      lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon,)
+            optimizer = DeepSpeedCPUAdam(optim_group_params,
+                                         lr=self.hparams.learning_rate,
+                                         eps=self.hparams.adam_epsilon,)
         elif self.hparams.optimizer == "adafactor":
             # 만약 optimizer에서 lr=None이 아니라 lr=0.001을 지정하는 경우라면
             # scale_parameter=False, relative_step=False로 지정 필요
@@ -110,9 +152,12 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
             #                      clip_threshold=1.0, decay_rate=-0.8,
             #                      eps=(1e-30, 1e-3),
             #                      relative_step=False, warmup_init=False, lr=1e-3)
-            optimizer = Adafactor(optim_group_params, scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
+            optimizer = Adafactor(optim_group_params, scale_parameter=True,
+                                  relative_step=True, warmup_init=True, lr=None)
         else:
-            optimizer = torch.optim.AdamW(optim_group_params, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon,)
+            optimizer = torch.optim.AdamW(optim_group_params,
+                                          lr=self.hparams.learning_rate,
+                                          eps=self.hparams.adam_epsilon,)
 
         # huggingface transformers의 NOAM scheduler 구현을 그대로 사용함.
         if self.hparams.optimizer == "adafactor":
@@ -188,9 +233,12 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         if "token_type_ids" in batch_in:
             del batch_in["token_type_ids"]
 
-        outputs = self.model.generate(batch_in['input_ids'], do_sample=False,
+        outputs = self.model.generate(input_ids=batch_in['input_ids'],
+                                      do_sample=False,
                                       num_beams=self.hparams.num_beams_for_test,
-                                      max_length=self.hparams.max_predict_length)
+                                      max_new_tokens=self.hparams.max_predict_length,
+                                      #max_time=5.0,
+                                      )
         #print(outputs.cpu().detach().numpy())
         return { "preds": outputs, "labels": labels }
 
@@ -212,7 +260,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         self.model.save_pretrained(model_save_path,
                                    is_main_process=True,
                                    push_to_hub=False,)
-        # tokenizer 추가 정보 저장
+        # tokenizer 추가 정보 저장은 PEFT 미 사용시에만 적용?
         self.tknizer.save_pretrained(model_save_path)
 
     @classmethod
@@ -221,5 +269,6 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         print("\n\n** Given Deepspeed model converted to fp32 checkpoint successfully. **\n",
               "Now you can load Pytorch-lightning checkpoint with following python code:\n",
               f"model = {cls.__name__}.load_from_checkpoint('{fp32_checkpoint_filepath}', strict=False)")
-        print("\nand You can safely ignore some missing state_dict, e.g. model.encoder.embed_tokens.weight.")
+        print("\nand You can safely ignore some missing state_dict, "
+              "e.g. model.encoder.embed_tokens.weight.")
 

@@ -15,12 +15,14 @@ class korailCollatorV1:
     sent1_field_name: str="title"
     sent2_field_name: str="content"
     label_field_name: str="label"
-    tokenizer: Optional[Callable]=field(default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small", return_tensors="pt"))
+    tokenizer: Optional[Callable]=field(
+        default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small", return_tensors="pt"))
     # 0: 같지 않음, 1: 같음
-    label_map: Union[Dict[Any, str], Callable[Any,Any]]=field(default_factory=lambda: {0:'different', 1:'paraphrase'})
+    label_map: Union[Dict[Any, str], Callable[Any,Any]]=field(
+        default_factory=lambda: {0:'different', 1:'paraphrase'})
     length_limit: int=2048
 
-    def __call__(self, examples: dict[str, Any]) -> dict[str, Any]:
+    def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(examples, dict):
             sent1s = examples[self.sent1_field_name]
             sent2s = examples[self.sent2_field_name]
@@ -42,7 +44,8 @@ class korailCollatorV1:
                 raise NotImplementedError
 
             #print(f"{input_texts[0]}\n=> {label_texts[0]}")
-            return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts, padding='longest', return_tensors="pt"))
+            return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
+                                                padding='longest', return_tensors="pt"))
         else:
             raise NotImplementedError
 

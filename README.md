@@ -45,13 +45,16 @@ python train.py -task seq2seq \
   -save_path [학습 모델 및 로그 저장 위치, 없으면 자동으로 디렉터리가 생성됨] \
   -init_model [ 사전학습 모델 파일 경로. pytorch_model.bin이 들어있는 디렉터리를 지정하면 됩니다. ] \
   -max_epoch [최대 학습 epoch 수, 기본값 4] \
-  -optimizer [adam, adafactor 둘 중 하나. 예: adafactor] \
+  -optim [adam, adafactor 둘 중 하나. 예: adafactor] \
   -learning_rate [adam 옵티마이저의 학습률. 기본 최적화 알고리즘인 adafactor를 사용하는 경우 자동으로 지정되며, 입력한 값은 무시됩니다.] \
   -gpus [사용될 GPU 수] -strategy ddp \
   -float_precision [연산 정밀도, 기본값 32. NVIDIA Ampere 급 이상을 사용하는 경우 16 지정 가능. 그 미만 카드에서는 16 지정시 NaN loss가 나올 수 있음] \
   -grad_acc [gradient accumulation, 기본값 1] -batch_size [배치크기.]
-
+  -tuning_method [finetune 또는 lora]
 ```
+
+"-tuning_method lora"를 설정하면, adapter model만 -save_path로 지정된 경로명 + \_adapter_ckpt 라는 위치에 -max_epoch 후 모델이 저장됩니다. 기본적으로는, 지정된 경로명 + \_hfmodel 이라는 이름으로 마지막 체크포인트가 huggingface 호환 모델로 저장됩니다.
+
 #### 이어서 학습하는 방법
 중단한 checkpoint로 부터 학습을 재개하려면, ``-resume_checkpoint [다시 시작하고 싶은 checkpoint 파일]`` 옵션을 지정하여 학습을 재개할 수 있습니다.
 
@@ -73,6 +76,27 @@ python inference.py -task seq2seq \
   -save_output [출력결과를 저장할 파일 이름] -batch_size 128 \
   -beam_size [beam 크기. 기본값 1., 번역 등은 2~5 사이의 값을 사용 OK.] \
   -max_predict_length [최대 추론 길이. 기본값 512. 레이블 추정의 경우 64~128로 설정하면 됨.]
+```
+
+#### lightning 모델 -> huggingface model 변환
+위의 학습기로 학습된 모델은 inference.py를 통해서 사용해야 하지만, 변환 후에는 다른 huggingface transformers 모델과 동일하게 from_pretrained() 메서드를 사용하여 모델 로딩 및 추론 코드 적용이 가능합니다. 변환기 사용법은 다음과 같습니다:
+
+```bash
+python export_checkpoint_to_hfmodel.py [checkpoint 디렉터리/파일명] [출력될 huggingface 모델 디렉터리: 자동 생성됨]
+```
+
+deepspeed를 사용하여 학습된 경우에도, 디렉터리가 지정되면 자동으로 변환합니다. .ckpt 파일을 지정하면, pytorch ddp로 학습된 모델로 보고 바로 변환합니다.
+
+#### huggingface model의 seq2seq 추론 방법
+위의 lightning 모델 -> huggingface model 변환 후, 변환된 모델은 다음 코드로 추론 가능합니다:
+
+```bash
+python hfmodel_s2s_inference.py \
+  -m [모델 파일 이름, 또는 경로. huggingface hub 모델 사용 가능] \
+  {-a [어댑터 모델 파일 이름: optional - tuning_method=lora로 학습된 모델의 경우]} \
+  {-t [토크나이저 모델/설정 위치: optional - 모델과 토크나이저가 다른 경우]} \
+  {-i [입력 텍스트 파일 명. 한줄 = 입력, 지정되지 않을 경우 표준입력(stdin)에서 읽음]} \
+  {-o [출력 텍스트 파일 명. 한줄 = 출력. 지정되지 않을 경우, 표준출력(stdout)으로 출력]}
 ```
 
 #### 실행 예시

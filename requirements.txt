@@ -9,3 +9,5 @@ looseversion
 jinja2
 jellyfish
 sentencepiece
+# needs hf accelerator
+peft

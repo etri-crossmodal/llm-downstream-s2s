@@ -18,11 +18,13 @@ class KLUENLIDataCollator:
     premise_field_name: str="premise"
     hypothesis_field_name: str="hypothesis"
     label_field_name: str="label"
-    tokenizer: Optional[Callable]=field(default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small", return_tensors="pt"))
+    tokenizer: Optional[Callable]=field(
+        default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small", return_tensors="pt"))
     # 0: 함의/entailment, 1: 중립/neutral, 2: 모순/contradiction
-    label_map: Union[Dict[Any, str], Callable[Any,Any]]=field(default_factory=lambda: {0:'entailment', 1:'neutral', 2:'contradiction'})
+    label_map: Union[Dict[Any, str], Callable[Any,Any]]=field(
+        default_factory=lambda: {0:'entailment', 1:'neutral', 2:'contradiction'})
 
-    def __call__(self, examples: dict[str, Any]) -> dict[str, Any]:
+    def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
         """
         출력 형식 - Dict, { 'input_ids': ndarray-like, 'attention_mask': ndarray-like, 'labels': ndarray-like }
         """
@@ -34,7 +36,9 @@ class KLUENLIDataCollator:
             input_texts = []
             for idx, premise in enumerate(premises):
                 hyp = hypothesises[idx]
-                #input_texts.append(f"다음 전제-가설간의 관계가 함의면 'entailment', 중립이면 'neutral', 모순이면 'contradiction'를 출력해라:\n\n전제: {premise}\n가설: {hyp}")
+                #input_texts.append(f"다음 전제-가설간의 관계가 함의면 'entailment', "
+                #                   f"중립이면 'neutral', 모순이면 'contradiction'를 출력해라:\n\n"
+                #                   f"전제: {premise}\n가설: {hyp}")
                 input_texts.append(f"KLUE NLI task - premise: [{premise}], hypothesis: [{hyp}]\n")
 
             if isinstance(self.label_map, dict):
@@ -45,7 +49,8 @@ class KLUENLIDataCollator:
             else:
                 raise NotImplementedError
 
-            return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts, padding='longest', return_tensors="pt"))
+            return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
+                                                padding='longest', return_tensors="pt"))
         else:
             raise NotImplementedError
 
@@ -61,11 +66,14 @@ class KLUEYNATDataCollator:
     # dataclass definitions
     title_field_name: str="title"
     label_field_name: str="label"
-    tokenizer: Optional[Callable]=field(default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small", return_tensors="pt"))
-    label_map: Union[Dict[Any, str], Callable[Any,Any]]=field(default_factory=lambda: {0:'IT/science', 1:'economy',
-        2:'social', 3:'life and culture', 4:'world', 5:'sports', 6:'politics'})
+    tokenizer: Optional[Callable]=field(
+        default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small", return_tensors="pt"))
+    label_map: Union[Dict[Any, str], Callable[Any,Any]]=field(
+        default_factory=lambda: {0:'IT/science', 1:'economy',
+                                 2:'social', 3:'life and culture', 4:'world',
+                                 5:'sports', 6:'politics'})
 
-    def __call__(self, examples: dict[str, Any]) -> dict[str, Any]:
+    def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(examples, dict):
             titles = examples[self.title_field_name]
             labels = examples[self.label_field_name]
@@ -82,7 +90,8 @@ class KLUEYNATDataCollator:
             else:
                 raise NotImplementedError
 
-            return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts, padding='longest', return_tensors="pt"))
+            return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
+                                                padding='longest', return_tensors="pt"))
         else:
             raise NotImplementedError
 
