@@ -23,6 +23,7 @@ class KLUENLIDataCollator:
     # 0: 함의/entailment, 1: 중립/neutral, 2: 모순/contradiction
     label_map: Union[Dict[Any, str], Callable[Any,Any]]=field(
         default_factory=lambda: {0:'entailment', 1:'neutral', 2:'contradiction'})
+    max_seq_length: Optional[int]=None
 
     def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -50,7 +51,8 @@ class KLUENLIDataCollator:
                 raise NotImplementedError
 
             return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
-                                                padding='longest', return_tensors="pt"))
+                                                padding='longest', return_tensors="pt",
+                                                max_length=self.max_seq_length, truncation="only_first",))
         else:
             raise NotImplementedError
 
@@ -72,6 +74,7 @@ class KLUEYNATDataCollator:
         default_factory=lambda: {0:'IT/science', 1:'economy',
                                  2:'social', 3:'life and culture', 4:'world',
                                  5:'sports', 6:'politics'})
+    max_seq_length: Optional[int]=None
 
     def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(examples, dict):
@@ -91,7 +94,8 @@ class KLUEYNATDataCollator:
                 raise NotImplementedError
 
             return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
-                                                padding='longest', return_tensors="pt"))
+                                                padding='longest', return_tensors="pt",
+                                                max_length=self.max_seq_length, truncation="only_first",))
         else:
             raise NotImplementedError
 

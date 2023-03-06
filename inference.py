@@ -88,7 +88,7 @@ def get_argparser():
     parser.add_argument("-max_seq_length", type=int, default=0,
                         help="set maximum token length of text in given datasets. "
                         "if example length exceeds, it will be DISCARDED without -do_truncate=True)")
-    parser.add_argument("-do_truncate", type=bool, default=False,
+    parser.add_argument("-do_truncate", type=bool, default=True,
                         help="If it sets to TRUE, truncate input(not label!) text with max_seq_length. "
                         "default bahavior=FALSE=just discard when exceeds max_seq_length. "
                         "however, when label exceeds max_seq_length, we will discard it whatsoever.")

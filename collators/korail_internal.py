@@ -20,7 +20,7 @@ class korailCollatorV1:
     # 0: 같지 않음, 1: 같음
     label_map: Union[Dict[Any, str], Callable[Any,Any]]=field(
         default_factory=lambda: {0:'different', 1:'paraphrase'})
-    length_limit: int=2048
+    length_limit: Optional[int]=None
 
     def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(examples, dict):
@@ -32,7 +32,7 @@ class korailCollatorV1:
             for idx, sent1 in enumerate(sent1s):
                 s2 = sent2s[idx]
                 input_text = f"#TITLE {sent1}\n#CONTENT {s2}"
-                input_text = input_text.encode('utf-8')[:self.length_limit-1].decode('utf-8', 'ignore')
+                #input_text = input_text.encode('utf-8')[:self.length_limit-1].decode('utf-8', 'ignore')
                 input_texts.append(input_text)
 
             if isinstance(self.label_map, dict):
@@ -44,8 +44,11 @@ class korailCollatorV1:
                 raise NotImplementedError
 
             #print(f"{input_texts[0]}\n=> {label_texts[0]}")
+            # tokenizer 수준에서 truncation을 실시함.
             return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
-                                                padding='longest', return_tensors="pt"))
+                                                padding='longest', return_tensors="pt",
+                                                max_length=length_limit, truncation="only_first",
+                                                ))
         else:
             raise NotImplementedError
 

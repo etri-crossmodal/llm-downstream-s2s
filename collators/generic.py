@@ -28,6 +28,7 @@ class GenericDataCollator:
     tokenizer: Optional[Callable]=field(
         default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small", return_tensors="pt"))
     label_map: Union[Dict[Any, str], Callable]=field(default_factory=lambda: { 0: "긍정", 1: "부정" })
+    max_seq_length: Optional[int]=None
 
     def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -50,7 +51,10 @@ class GenericDataCollator:
                 label_texts = labels
 
             return BatchEncoding(self.tokenizer(text=input_text, text_target=label_texts,
-                                                padding="longest", return_tensors="pt"))
+                                                padding="longest", return_tensors="pt",
+                                                max_length=self.max_seq_length,
+                                                truncation="only_first",
+                                                ))
         else:
             raise NotImplementedError
 
@@ -73,6 +77,7 @@ class GenericPromptedDataCollator:
     tokenizer: Optional[Callable]=field(
         default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small"))
     label_map: Optional[Union[Dict[Any, str], Callable]]=field(default_factory=lambda: { 0: "긍정", 1: "부정" })
+    max_seq_length: Optional[int]=None
 
     def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -102,7 +107,9 @@ class GenericPromptedDataCollator:
                 raise NotImplementedError
 
             return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
-                                                padding="longest", return_tensors="pt"))
+                                                padding="longest", return_tensors="pt",
+                                                max_length=self.max_seq_length, truncation="only_first",
+                                                ))
         else:
             raise NotImplementedError
 

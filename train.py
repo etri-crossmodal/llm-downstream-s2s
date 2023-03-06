@@ -60,7 +60,7 @@ def get_argparser():
     parser.add_argument("-max_seq_length", type=int, default=0,
                         help="set maximum token length of text in given datasets. "
                         "if example length exceeds, it will be DISCARDED without -do_truncate=True)")
-    parser.add_argument("-do_truncate", type=bool, default=False,
+    parser.add_argument("-do_truncate", type=bool, default=True,
                         help="If it sets to TRUE, truncate input(not label!) text with max_seq_length. "
                         "default bahavior=FALSE=just discard when exceeds max_seq_length. "
                         "however, when label exceeds max_seq_length, we will discard it whatsoever.")
@@ -95,6 +95,8 @@ def get_argparser():
                         "WARNING: -save_every=k * -grad_acc=x = save checkpoints every k*x steps")
     parser.add_argument("-save_last_k", type=int, default=25,
                         help="remain last k checkpoint.")
+    parser.add_argument("-valid_check_interval", type=float, default=1.0,
+                        help="set validation check interval, 1.0 = end of an epoch, 0.5 = half of an epoch.")
     parser.add_argument("-gpus", type=int, default=2,
                         help="number of accelerators(e.g. GPUs) for training.")
     parser.add_argument("-strategy", type=str, default="ddp",
@@ -123,6 +125,9 @@ if __name__ == '__main__':
                         "e.g. -init_model google/byt5-small")
     elif args.config_path != "" and args.init_model != "":
         raise ValueError("use -config_path or -init_model exclusively. do not use them both.")
+
+    if args.valid_check_interval < 0.0 or args.valid_check_interval > 1.0:
+        raise ValueError("-valid_check_interval must be in [0.0, 1.0]")
 
     if args.seed < 0:
         # python 3.6 or more needed to use secrets
@@ -251,27 +256,32 @@ if __name__ == '__main__':
     # add checkpoint saver
     # 이건 gradient acc때문임: every_n_train_steps * gradient_acc = 실제 저장되는 시점
     if args.save_every > 0:
-        checkpoint_cb = ModelCheckpoint(dirpath=checkpoint_dirpath,
-                filename='{epoch}-{step}',
-                save_top_k=args.save_last_k,
-                # 'global_step'은 매뉴얼과 달리 올바르게 monitoring 되지 않는다. 사용하지 말것
-                monitor="step",
-                mode="max",
-                # -save_every(=150) * grad_acc(=32) = save checkpoints every 4800 steps
-                every_n_train_steps=args.save_every,
-                # every_n_train_steps/every_n_epochs/train_time_interval must be exclusive
-                every_n_epochs=None,
-                train_time_interval=None,
-                verbose=True)
-        callbacks.append(checkpoint_cb)
-
-    checkpoint_cb_by_ep = ModelCheckpoint(dirpath=checkpoint_dirpath,
-            filename='{epoch}-{step}_by_epoch',
-            every_n_train_steps=None,
-            every_n_epochs=1,
-            save_top_k=-1,
+        checkpoint_cb = ModelCheckpoint(
+            dirpath=checkpoint_dirpath,
+            save_top_k=args.save_last_k,
+            monitor="val_loss",
+            filename='epoch{epoch:02d}-global_step{step}-val_loss{val_loss:.2f}',
+            auto_insert_metric_name=False,
+            # 'global_step'은 매뉴얼과 달리 올바르게 monitoring 되지 않는다. 사용하지 말것
+            mode="min",
+            # -save_every(=150) * grad_acc(=32) = save checkpoints every 4800 steps
+            every_n_train_steps=args.save_every,
+            # every_n_train_steps/every_n_epochs/train_time_interval must be exclusive
+            every_n_epochs=None,
             train_time_interval=None,
             verbose=True)
+        callbacks.append(checkpoint_cb)
+
+    checkpoint_cb_by_ep = ModelCheckpoint(
+        dirpath=checkpoint_dirpath,
+        monitor="val_loss",
+        filename='epoch{epoch:02d}-global_step{step}-val_loss{val_loss:.2f}_endofepoch',
+        auto_insert_metric_name=False,
+        every_n_train_steps=None,
+        every_n_epochs=1,
+        save_top_k=-1,
+        train_time_interval=None,
+        verbose=True)
     callbacks.append(checkpoint_cb_by_ep)
 
     # add Learning Rate Monitor
@@ -292,7 +302,7 @@ if __name__ == '__main__':
             default_root_dir=base_dirpath,
             logger=logger,
             check_val_every_n_epoch=1,
-            val_check_interval=1.0,
+            val_check_interval=args.valid_check_interval,
             max_epochs=args.max_epoch,
             log_every_n_steps=1,
             accumulate_grad_batches=args.grad_acc,

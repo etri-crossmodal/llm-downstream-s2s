@@ -20,6 +20,7 @@ class PAWS_XDataCollator:
     # 0: 같지 않음, 1: 같음
     label_map: Union[Dict[Any, str], Callable[Any,Any]]=field(
         default_factory=lambda: {0:'different', 1:'paraphrase'})
+    max_seq_length: Optional[int]=None
 
     def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(examples, dict):
@@ -41,7 +42,8 @@ class PAWS_XDataCollator:
                 raise NotImplementedError
 
             return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
-                                                padding='longest', return_tensors="pt"))
+                                                padding='longest', return_tensors="pt",
+                                                max_length=self.max_seq_length, truncation="only_first",))
         else:
             raise NotImplementedError
 

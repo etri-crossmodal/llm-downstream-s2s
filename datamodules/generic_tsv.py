@@ -35,7 +35,7 @@ class GenericTSVDataModule(pl.LightningDataModule):
                  delimiter: str="\t",
                  valid_proportions: float=0.05,
                  test_proportions: float=0.0,
-                 max_seq_length: int=0,
+                 max_seq_length: Optional[int]=None,
                  tokenizer: Optional[Callable]=None,
                  do_truncate: bool=False,
                  hf_cache_dir: Optional[str]=None,
@@ -153,8 +153,9 @@ class GenericTSVDataModule(pl.LightningDataModule):
             self.dataset_train_iter = tv_split["train"]
             self.dataset_valid_iter = tv_split["test"]
 
-        if self.max_seq_length > 0:
-            print(f"max sequence length: {self.max_seq_length} > 0, now starts filtering by length.")
+        # do_truncate == True 일 경우에는 tokenizer에서 제한함.
+        if self.max_seq_length is not None and self.max_seq_length > 0 and self.do_truncate is False:
+            print(f"max sequence length: {self.max_seq_length} > 0, now starts filtering(TO DISCARD) by length.")
             def check_length_func(x, tokenizer, limit):
                 if tokenizer is None:
                     return sum([len(y) for y in x.values()]) < limit
@@ -162,17 +163,13 @@ class GenericTSVDataModule(pl.LightningDataModule):
                     return sum([len(tokenizer(y)["input_ids"]) for y in x.values()]) < limit
 
             func = partial(check_length_func, tokenizer=self.tokenizer, limit=self.max_seq_length)
-            if self.do_truncate is False:
-                # discard, we will use filter()
-                if self.dataset_train_iter is not None:
-                    self.dataset_train_iter = self.dataset_train_iter.filter(func, num_proc=2,)
-                if self.dataset_valid_iter is not None:
-                    self.dataset_valid_iter = self.dataset_valid_iter.filter(func, num_proc=2,)
-                if self.dataset_test_iter is not None:
-                    self.dataset_test_iter = self.dataset_test_iter.filter(func, num_proc=2,)
-            else:
-                # truncate, we need to use dataset.map()
-                raise NotImplementedError("Sorry, truncation is not implemented yet.")
+            # discard, we will use filter()
+            if self.dataset_train_iter is not None:
+                self.dataset_train_iter = self.dataset_train_iter.filter(func, num_proc=2,)
+            if self.dataset_valid_iter is not None:
+                self.dataset_valid_iter = self.dataset_valid_iter.filter(func, num_proc=2,)
+            if self.dataset_test_iter is not None:
+                self.dataset_test_iter = self.dataset_test_iter.filter(func, num_proc=2,)
         return
 
     def save_to_disk(self, save_path):

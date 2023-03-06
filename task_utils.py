@@ -27,7 +27,7 @@ def get_task_data(task_name: str, batch_size: int,
                   test_data_file: Optional[List]=None,
                   valid_proportions: float=0.0,
                   test_proportions: float=0.0,
-                  max_seq_length: int=0,
+                  max_seq_length: Optional[int]=None,
                   do_truncate: bool=False,
                   hf_cache_dir: Optional[str]=None):
     """
@@ -40,41 +40,51 @@ def get_task_data(task_name: str, batch_size: int,
     data_module, collator = None, None
     gold_labels = None
 
+    if max_seq_length == 0:
+        max_seq_length = None
+
     if task_name == "nsmc-naive":
         # NSMC - naive version
         data_module = NSMCDataModule(batch_size=batch_size)
         collator = generic.GenericDataCollator(input_field_name="document",
                                                label_field_name="label",
                                                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
-                                               label_map={0: 'positive', 1: 'negative'})
+                                               label_map={0: 'positive', 1: 'negative'},
+                                               max_seq_length=max_seq_length,)
         gold_labels = {"positive":0, "negative":1}
     elif task_name == "nsmc-prompted":
         data_module = NSMCDataModule(batch_size=batch_size)
-        collator = generic.GenericPromptedDataCollator(input_field_name="document",
-                label_field_name="label",
-                input_template="nsmc sentiment classification: {{ input }}",
-                label_template="{{ label }}",
-                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
-                label_map={0:'positive', 1:'negative'})
+        collator = generic.GenericPromptedDataCollator(
+            input_field_name="document",
+            label_field_name="label",
+            input_template="nsmc sentiment classification: {{ input }}",
+            label_template="{{ label }}",
+            tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+            label_map={0:'positive', 1:'negative'},
+            max_seq_length=max_seq_length,)
         gold_labels = {"positive":0, "negative":1}
     elif task_name == "klue-nli-prompted":
         # Example 2: KLUE-NLI
         data_module = KLUENLIDataModule(batch_size=batch_size)
-        collator = klue.KLUENLIDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),)
+        collator = klue.KLUENLIDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+                                            max_seq_length=max_seq_length,)
         gold_labels = {"entailment":0, "neutral":1, "contradiction":2}
     elif task_name == "klue-ynat-prompted":
         # Example: KLUE-YNAT
         data_module = KLUEYNATDataModule(batch_size=batch_size)
-        collator = klue.KLUEYNATDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),)
+        collator = klue.KLUEYNATDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+                                            max_seq_length=max_seq_length,)
         gold_labels = {"different":0, "paraphrase":1}
     elif task_name == 'kornli-prompted':
         # Example 3: KorNLI
         data_module = KorNLIDataModule(batch_size=batch_size)
-        collator = klue.KLUENLIDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),)
+        collator = klue.KLUENLIDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+                                            max_seq_length=max_seq_length,)
         gold_labels = {"entailment":0, "neutral":1, "contradiction":2}
     elif task_name == 'paws-x-kor':
         data_module = paws_xDataModule(batch_size=batch_size)
-        collator = pawsx.PAWS_XDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),)
+        collator = pawsx.PAWS_XDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+                                            max_seq_length=max_seq_length,)
         gold_labels = {'IT/science':0, 'economy':1, 'social':2,
                        'life and culture':3, 'world':4, 'sports':5, 'politics':6}
     elif task_name == 'kr-internal':
@@ -85,7 +95,7 @@ def get_task_data(task_name: str, batch_size: int,
         collator = korail_internal.korailCollatorV1(
             tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
             label_map=data_module.id_to_label_func(),
-            length_limit=512)
+            length_limit=max_seq_length)
         """
         collator = generic.GenericPromptedDataCollator(input_field_name="title",
                 label_field_name="label",
@@ -113,6 +123,7 @@ def get_task_data(task_name: str, batch_size: int,
                 # get callable to label mapping
                 label_map=data_module.id_to_label_func(),
                 #label_map=data_module.id_to_label_map_dict(),
+                max_seq_length=max_seq_length,
                 )
         # FIXME: 현재는 label을 얻기 위해 data_module.setup()을 호출해야 함.
         data_module.setup()
@@ -123,13 +134,14 @@ def get_task_data(task_name: str, batch_size: int,
                                            ["text", "target_text"], "\t",
                                            valid_proportions, test_proportions,
                                            max_seq_length,
-                                           AutoTokenizer.from_pretrained(tokenizer_str),
+                                           AutoTokenizer.from_pretrained(tokenizer_str,),
                                            do_truncate,
                                            hf_cache_dir=hf_cache_dir)
         collator = generic.GenericDataCollator(input_field_name="text",
                                                label_field_name="target_text",
                                                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
-                                               label_map=None)
+                                               label_map=None,
+                                               max_seq_length=max_seq_length,)
         gold_labels = None
 
     return data_module, collator, gold_labels
