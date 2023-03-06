@@ -168,8 +168,9 @@ class GenericTSVDataModule(pl.LightningDataModule):
                 self.dataset_train_iter = self.dataset_train_iter.filter(func, num_proc=2,)
             if self.dataset_valid_iter is not None:
                 self.dataset_valid_iter = self.dataset_valid_iter.filter(func, num_proc=2,)
-            if self.dataset_test_iter is not None:
-                self.dataset_test_iter = self.dataset_test_iter.filter(func, num_proc=2,)
+            # DELETEME: testset은 filtering 되어서는 안된다. OOM이 나면 이것은 순전히 사용자가 신경써야할 문제다.
+            #if self.dataset_test_iter is not None:
+            #    self.dataset_test_iter = self.dataset_test_iter.filter(func, num_proc=2,)
         return
 
     def save_to_disk(self, save_path):
