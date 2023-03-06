@@ -41,10 +41,10 @@ class korTrainTextDataModule(pl.LightningDataModule):
         self.i2l = {idx: names for idx, names in enumerate(whole_ds['train'].features['label'].names)}
         self.l2i = {names: idx for idx, names in enumerate(whole_ds['train'].features['label'].names)}
 
-        # FIXME: 부서서무|처리과서무 를 undersampling
-        nonmj = whole_ds["train"].filter(lambda ex: ex["label"] != self.l2i['부서서무|처리과서무'])
-        mj = whole_ds["train"].filter(lambda ex: ex["label"] == self.l2i['부서서무|처리과서무'])
-        whole_ds["train"] = concatenate_datasets([nonmj, mj.shard(num_shards=7, index=1)])
+        # DELETEME: 부서서무|처리과서무 를 undersampling
+        #nonmj = whole_ds["train"].filter(lambda ex: ex["label"] != self.l2i['부서서무|처리과서무'])
+        #mj = whole_ds["train"].filter(lambda ex: ex["label"] == self.l2i['부서서무|처리과서무'])
+        #whole_ds["train"] = concatenate_datasets([nonmj, mj.shard(num_shards=7, index=1)])
 
         # split train into train/valid
         splitted_ds = whole_ds["train"].train_test_split(test_size=self.valid_proportion,
