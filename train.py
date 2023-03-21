@@ -93,8 +93,9 @@ def get_argparser():
     parser.add_argument("-save_every", type=int, default=0,
                         help="save every n global steps. default: 0 (disable)"
                         "WARNING: -save_every=k * -grad_acc=x = save checkpoints every k*x steps")
-    parser.add_argument("-save_last_k", type=int, default=25,
-                        help="remain last k checkpoint.")
+    parser.add_argument("-save_last_k", type=int, default=0,
+                        help="remain last k checkpoint. if you want to save checkpoint before validation, "
+                        "please set this value to 0, or you will lose some early checkpoints.")
     parser.add_argument("-valid_check_interval", type=float, default=1.0,
                         help="set validation check interval, 1.0 = end of an epoch, 0.5 = half of an epoch.")
     parser.add_argument("-gpus", type=int, default=2,

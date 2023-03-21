@@ -12,6 +12,7 @@
     Copyright (C) 2023~ Jong-hun Shin. ETRI LIRS.
 """
 import logging
+import re
 
 from pathlib import Path
 from typing import Any, List, Union, Optional, Callable
@@ -88,6 +89,14 @@ class GenericTSVDataModule(pl.LightningDataModule):
 
         if filelist is not None:
             for a_file in tqdm.tqdm(filelist):
+                # get sharding information
+                shard_val = 0
+                sh_srch = re.search(r':([0-9]*)$', a_file)
+                if sh_srch is not None and len(sh_srch.groups()) > 0:
+                    shard_val = int(sh_srch.groups()[0])
+                    a_file = a_file[:-(len(sh_srch.groups()[0])+1)]
+                    print(f"** Sharding suffix detected: 1/{shard_val} of "
+                          f"data samples will be used in {a_file}")
                 # init
                 datadict = {}
                 for clid in range(column_len):
@@ -95,26 +104,41 @@ class GenericTSVDataModule(pl.LightningDataModule):
 
                 pif = Path(a_file)
                 if pif.exists() and pif.is_file():
+                    # FIXME: 확장자에 따라서 다르게 행동하도록. e.g. jsonl.
                     with open(a_file, 'rt') as in_f:
                         linecnt = 0
                         for aline in in_f:
                             alist = aline.strip().split(self.delimiter)
                             if len(alist) == column_len:
                                 for clid, data in enumerate(alist):
+                                    # replace '\\n' to '\n', to preserve a line
+                                    data = data.replace(r'\n', '\n')
                                     datadict[self.column_map[clid]].append(data)
                             else:
                                 print(f"WARNING: in {a_file}, invalid line found. "
                                       f"skip line: #{linecnt+1}, {len(alist)-1} delimiter found.")
                             linecnt += 1
-                    dss.append(datasets.Dataset.from_dict(datadict))
+
+                    ddsi = datasets.Dataset.from_dict(datadict)
+                    if shard_val > 0:
+                        # sharding이 들어가는 경우 shuffle을 의무적으로 한다.
+                        ddsi = ddsi.shuffle()
+                        ddsi = ddsi.shard(num_shards=shard_val, index=0)
+                    dss.append(ddsi)
                 elif pif.exists() and pif.is_dir():
                     # open with load_from_disk()
                     print("trying to load with datasets.load_from_disk()")
                     dsi = datasets.load_from_disk(a_file)
                     if isinstance(dsi, datasets.DatasetDict):
                         for dselem in dsi.values():
+                            if shard_val > 0:
+                                dselem = dselem.shuffle()
+                                dselem = dselem.shard(num_shards=shard_val, index=0)
                             dss.append(dselem)
                     elif isinstance(dsi, datasets.Dataset):
+                        if shard_val > 0:
+                            dsi = dsi.shuffle()
+                            dsi = dsi.shard(num_shards=shard_val, index=0)
                         dss.append(dsi)
                 else:
                     # 수정 필요: 분명히 column name이 다를텐데...
@@ -122,8 +146,14 @@ class GenericTSVDataModule(pl.LightningDataModule):
                     dsi = datasets.load_dataset(a_file, cache_dir=self.hf_cache_dir)
                     if isinstance(dsi, datasets.DatasetDict):
                         for dselem in dsi.values():
+                            if shard_val > 0:
+                                dselem = dselem.shuffle()
+                                dselem = dselem.shard(num_shards=shard_val, index=0)
                             dss.append(dselem)
                     elif isinstance(dsi, datasets.Dataset):
+                        if shard_val > 0:
+                            dsi = dsi.shuffle()
+                            dsi = dsi.shard(num_shards=shard_val, index=0)
                         dss.append(dsi)
         else:
             return None
@@ -143,13 +173,13 @@ class GenericTSVDataModule(pl.LightningDataModule):
 
         if self.test_props > 0.0 and self.dataset_test_iter is None:
            tt_split = self.dataset_train_iter.train_test_split(test_size=self.test_props, shuffle=True,
-                                                               seed=123456,)
+                                                               seed=592821,)
            self.dataset_train_iter = tt_split["train"]
            self.dataset_test_iter = tt_split["test"]
 
         if self.valid_props > 0.0 and self.dataset_valid_iter is None:
             tv_split = self.dataset_train_iter.train_test_split(test_size=self.valid_props, shuffle=True,
-                                                                seed=123456,)
+                                                                seed=395810,)
             self.dataset_train_iter = tv_split["train"]
             self.dataset_valid_iter = tv_split["test"]
 
