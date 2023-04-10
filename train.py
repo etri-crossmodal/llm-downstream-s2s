@@ -16,6 +16,7 @@ import torch
 import pytorch_lightning as pl
 import task_utils
 
+from datetime import timedelta
 from torch.distributed.fsdp.wrap import (transformer_auto_wrap_policy)
 from transformers.models.t5.modeling_t5 import T5Block
 from pytorch_lightning.strategies import DeepSpeedStrategy
@@ -23,7 +24,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 # we need pytorch 1.12+
 from pytorch_lightning.strategies import DDPFullyShardedNativeStrategy
 from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
-from looseversion import LooseVersion
+from packaging.version import Version
 
 
 from models.mlm_plmodule_wrapper import ETRIT5ConditionalGenModelLightningModule
@@ -93,7 +94,9 @@ def get_argparser():
     parser.add_argument("-save_every", type=int, default=0,
                         help="save every n global steps. default: 0 (disable)"
                         "WARNING: -save_every=k * -grad_acc=x = save checkpoints every k*x steps")
-    parser.add_argument("-save_last_k", type=int, default=0,
+    parser.add_argument("-save_every_hour", type=int, default=1,
+                        help="save checkpoint in every N hour.")
+    parser.add_argument("-save_last_k", type=int, default=2,
                         help="remain last k checkpoint. if you want to save checkpoint before validation, "
                         "please set this value to 0, or you will lose some early checkpoints.")
     parser.add_argument("-valid_check_interval", type=float, default=1.0,
@@ -107,7 +110,7 @@ def get_argparser():
                         help="set floating point precision. default value is 32, "
                         "you can set 16, and if bf16 supported, bf16 will be enabled automatically.")
     parser.add_argument("-optim", type=str, default="adam",
-                        help="set a optimizer. adam/cpuadam/adafactor")
+                        help="set optimizer. with adafactor, recommend to use -learning_rate 0.001")
     parser.add_argument("-tuning_method", type=str, default="finetune",
                         help="EXPERIMENTAL: use for parameter-efficient fine-tuning."
                         "you can use one of [lora/prefixtuning/finetune]")
@@ -174,7 +177,7 @@ if __name__ == '__main__':
         raise ValueError("bad argument: you can assign 32 or 16 for -float_precision")
 
     bf16_ready = (torch.version.cuda and torch.cuda.is_bf16_supported()
-            and LooseVersion(torch.version.cuda) >= "11.0"
+            and Version(torch.version.cuda) >= Version("11.0")
             and torch.distributed.is_nccl_available())
 
     if bf16_ready and precision_arg == 32:
@@ -259,31 +262,59 @@ if __name__ == '__main__':
     if args.save_every > 0:
         checkpoint_cb = ModelCheckpoint(
             dirpath=checkpoint_dirpath,
-            save_top_k=args.save_last_k,
-            monitor="val_loss",
             filename='epoch{epoch:02d}-global_step{step}-val_loss{val_loss:.2f}',
+            monitor="val_loss",
+            verbose=True,
             auto_insert_metric_name=False,
             # 'global_step'은 매뉴얼과 달리 올바르게 monitoring 되지 않는다. 사용하지 말것
             mode="min",
             # -save_every(=150) * grad_acc(=32) = save checkpoints every 4800 steps
+            save_top_k=args.save_last_k,
             every_n_train_steps=args.save_every,
             # every_n_train_steps/every_n_epochs/train_time_interval must be exclusive
             every_n_epochs=None,
             train_time_interval=None,
-            verbose=True)
+        )
         callbacks.append(checkpoint_cb)
 
+    # epoch-wise checkpoint saving
     checkpoint_cb_by_ep = ModelCheckpoint(
         dirpath=checkpoint_dirpath,
-        monitor="val_loss",
         filename='epoch{epoch:02d}-global_step{step}-val_loss{val_loss:.2f}_endofepoch',
+        monitor="val_loss",
+        verbose=True, save_last=True,
+        mode="min",
         auto_insert_metric_name=False,
         every_n_train_steps=None,
         every_n_epochs=1,
         save_top_k=-1,
         train_time_interval=None,
-        verbose=True)
+    )
     callbacks.append(checkpoint_cb_by_ep)
+
+    # time-based checkpoint saving
+    if args.save_every_hour > 0:
+        delta = timedelta(
+                days=0,
+                seconds=0,
+                microseconds=0,
+                milliseconds=0,
+                minutes=0,
+                hours=args.save_every_hour,
+                weeks=0)
+
+        checkpoint_cb_by_hours = ModelCheckpoint(
+            dirpath=checkpoint_dirpath,
+            monitor='step',
+            mode="max",
+            filename='epoch{epoch:02d}-global_step{step}-by-hour',
+            auto_insert_metric_name=False,
+            every_n_train_steps=None,
+            every_n_epochs=None,
+            save_top_k=2,
+            train_time_interval=delta,
+            verbose=True)
+        callbacks.append(checkpoint_cb_by_hours)
 
     # add Learning Rate Monitor
     lr_mon = LearningRateMonitor(logging_interval=None)
@@ -311,6 +342,11 @@ if __name__ == '__main__':
             strategy=strat_instance
             )
 
+    # first validation for -save_every
+    if args.save_every > 0:
+        print("** Validate Initialized Model before fitting for checkpointing functionality.")
+        trainer.validate(model=model, dataloaders=data_module)
+
     print("** Model Fitting Started.")
     if args.resume_checkpoint != "":
         trainer.fit(model, datamodule=data_module, ckpt_path=args.resume_checkpoint)
@@ -323,10 +359,10 @@ if __name__ == '__main__':
               "please wait for a while")
         trainer.save_checkpoint(base_dirpath + "/save_checkpoint_fallback.pt")
         print("Fallback checkpoint was saved.")
-
-    if args.tuning_method != 'finetune':
-        # PEFT를 썼으면 바로 모델을 export 할 것.
-        print("Trained With Parameter-Efficient Fine-Tuning, save adapter checkpoint.")
-        model.export_hf_model(args.save_path.rstrip('/\\') + '_adapter_ckpt')
     else:
-        model.export_hf_model(args.save_path.rstrip('/\\') + '_hfmodel')
+        if args.tuning_method != 'finetune':
+            # PEFT를 썼으면 바로 모델을 export 할 것.
+            print("Trained With Parameter-Efficient Fine-Tuning, save adapter checkpoint.")
+            model.export_hf_model(args.save_path.rstrip('/\\') + '_adapter_ckpt')
+        else:
+            model.export_hf_model(args.save_path.rstrip('/\\') + '_hfmodel')

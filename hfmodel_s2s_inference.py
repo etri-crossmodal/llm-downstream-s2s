@@ -57,7 +57,7 @@ def get_adaptered_model(basemodel_instance, adapter_path):
 
         # adapter_conf = PeftConfig.from_pretrained(adapter_path)
         if isinstance(basemodel_instance, str):
-            basemodel_instance = AutoModelForSeq2SeqLM.from_pretrained(basemodel_instance)
+            basemodel_instance = AutoModelForSeq2SeqLM.from_pretrained(basemodel_instance, device_map="auto")
         logger.warning("Prepare PEFT Model from basemodel.")
         return PeftModel.from_pretrained(basemodel_instance, adapter_path)
     except ImportError as e:
@@ -84,6 +84,7 @@ def do_generate(args, model_instance, tokenizer_instance, input_b):
                                   return_tensors="pt", padding=True,
                                   pad_to_multiple_of=8,)
     with torch.no_grad():
+        input_tk.to('cuda')
         return model_instance.generate(input_ids=input_tk["input_ids"],
                                        max_new_tokens=args.max_seq_length,
                                        num_beams=args.beam_size)
@@ -96,7 +97,7 @@ if __name__ == '__main__':
     if args.adapter != "":
         model = get_adaptered_model(args.model, args.adapter)
     else:
-        model = AutoModelForSeq2SeqLM.from_pretrained(args.model)
+        model = AutoModelForSeq2SeqLM.from_pretrained(args.model, device_map="auto")
 
     if args.tokenizer is not None and args.tokenizer != "":
         tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)

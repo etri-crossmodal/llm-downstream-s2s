@@ -121,6 +121,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
 
         scheduler는 linear warmup-linear decay로 구현되어 있었다.
         """
+
         # auto-wrapped model이 될 가능성을 위해, model을 다시 본다.
         model = self.trainer.model
         # CHECKME: no_decay target 이름이 맞는지 한번 더 확인할 것
@@ -148,12 +149,12 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         elif self.hparams.optimizer == "adafactor":
             # 만약 optimizer에서 lr=None이 아니라 lr=0.001을 지정하는 경우라면
             # scale_parameter=False, relative_step=False로 지정 필요
-            #optimizer = Adafactor(optim_group_params, scale_parameter=False,
-            #                      clip_threshold=1.0, decay_rate=-0.8,
-            #                      eps=(1e-30, 1e-3),
-            #                      relative_step=False, warmup_init=False, lr=1e-3)
-            optimizer = Adafactor(optim_group_params, scale_parameter=True,
-                                  relative_step=True, warmup_init=True, lr=None)
+            optimizer = Adafactor(optim_group_params, scale_parameter=False,
+                                  clip_threshold=1.0, decay_rate=-0.8,
+                                  eps=(1e-30, 1e-3),
+                                  relative_step=False, warmup_init=False, lr=self.hparams.learning_rate)
+            #optimizer = Adafactor(optim_group_params, scale_parameter=True,
+            #                      relative_step=True, warmup_init=True, lr=None)
         else:
             optimizer = torch.optim.AdamW(optim_group_params,
                                           lr=self.hparams.learning_rate,
@@ -161,7 +162,12 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
 
         # huggingface transformers의 NOAM scheduler 구현을 그대로 사용함.
         if self.hparams.optimizer == "adafactor":
-            scheduler = AdafactorSchedule(optimizer)
+            #scheduler = AdafactorSchedule(optimizer)
+            scheduler = get_linear_schedule_with_warmup(
+                optimizer,
+                num_warmup_steps=self.hparams.warmup_steps,
+                num_training_steps=self.trainer.estimated_stepping_batches,
+            )
         else:
             scheduler = get_linear_schedule_with_warmup(
                 optimizer,
@@ -210,9 +216,11 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
 
         # 시작은 어차피 258.. 로 시작하므로.
         pred_seq = logits[0:].argmax(2)
-        n_words = logits.shape[1]
+        val_acc = torch.eq(pred_seq, labels).sum() / labels.nelement()
 
         self.log("val_loss", val_loss.item(), on_step=False, on_epoch=True, prog_bar=True,
+                 logger=True, sync_dist=True, batch_size=self.hparams.val_batch_size)
+        self.log("val_acc", val_acc.item(), on_step=False, on_epoch=True, prog_bar=True,
                  logger=True, sync_dist=True, batch_size=self.hparams.val_batch_size)
 
         return { "loss": val_loss, "preds": pred_seq, "labels": labels }

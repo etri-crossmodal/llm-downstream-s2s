@@ -19,7 +19,7 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 import evaluate
 
-from looseversion import LooseVersion
+from packaging.version import Version
 from torch import nn
 from torch.utils.data import DataLoader
 
@@ -152,7 +152,7 @@ if __name__ == '__main__':
         raise Exception("bad argument: you can assign 32 or 16 for -float_precision")
 
     bf16_ready = (torch.version.cuda and torch.cuda.is_bf16_supported()
-            and LooseVersion(torch.version.cuda) >= "11.0"
+            and Version(torch.version.cuda) >= Version("11.0")
             and torch.distributed.is_nccl_available())
 
     if bf16_ready and precision_arg == 32:
