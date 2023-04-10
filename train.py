@@ -201,8 +201,25 @@ if __name__ == '__main__':
 
         strat_instance = DDPFullyShardedNativeStrategy(cpu_offload=CPUOffload(offload_params=True),
                                                        **fsdp_kwargs)
+    elif args.strategy == "deepspeed_1":
+        # just partition optimizer states, so we can use any optimizers with it.
+        strat_instance = DeepSpeedStrategy(stage=1, remote_device="gpu",
+                                           reduce_bucket_size=2e8,
+                                           logging_batch_size_per_gpu=args.train_batch_size)
+    elif args.strategy == "deepspeed_2_fusedadam":
+        # uses more VRAM ~5GB from deepspeed_2_optim_offload + cpuadam.
+        optimizer_arg = "fusedadam"
+        strat_instance = DeepSpeedStrategy(stage=2, remote_device="gpu",
+                                           offload_optimizer=False, offload_parameters=False,
+                                           pin_memory=True,
+                                           allgather_bucket_size=2e8,
+                                           reduce_bucket_size=2e8,
+                                           contiguous_gradients=True, overlap_comm=True,
+                                           partition_activations=True, cpu_checkpointing=True,
+                                           logging_batch_size_per_gpu=args.train_batch_size)
     elif args.strategy == "deepspeed_2_optim_offload":
         print("** Strategy: Microsoft DeepSpeed Zero 2 + Optimizer Offload")
+        optimizer_arg = "cpuadam"
         strat_instance = DeepSpeedStrategy(stage=2, remote_device="cpu",
                                            offload_optimizer=True, offload_parameters=False,
                                            pin_memory=True,
@@ -210,12 +227,12 @@ if __name__ == '__main__':
                                            reduce_bucket_size=2e8,
                                            contiguous_gradients=True, overlap_comm=True,
                                            logging_batch_size_per_gpu=args.batch_size)
-        optimizer_arg = "cpuadam"
     elif args.strategy == "deepspeed_3_full":
         print("** Strategy: Microsoft DeepSpeed Zero 3 + Full(CPU) Offload")
         # _size=2e7, bf16, seq=1024, bs=4, grad_acc=64 ==> 3.7B(byt5-xl) not passed on 48GB VRAM (by OOM)
         # 학습에는 1 epoch에 130일 정도가 소요된다. 여전히 pressure가 너무 높아서 실 학습은 어려움
         # FIXME: VRAM 최적화를 위한 추가 조정 필요
+        optimizer_arg = "cpuadam"
         strat_instance = DeepSpeedStrategy(stage=3, remote_device="cpu",
                                            offload_optimizer=True, offload_parameters=True,
                                            allgather_bucket_size=1.3e8,
@@ -229,8 +246,6 @@ if __name__ == '__main__':
         if args.strategy != "ddp":
             print("** Unknown strategy: set to ddp.")
         strat_instance = "ddp"
-        # downstream task이므로 adafactor를 사용
-        #optimizer_arg = "adafactor"
 
     # ================ FIXME for Training ==================
     # FIXME: task config를 별도로 두도록 하여 인자 수를 간소화하고,
