@@ -48,7 +48,8 @@ def get_task_data(task_name: str, batch_size: int,
         data_module = NSMCDataModule(batch_size=batch_size)
         collator = generic.GenericDataCollator(input_field_name="document",
                                                label_field_name="label",
-                                               tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+                                               tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
+                                                                                       use_auth_token=True),
                                                label_map={0: 'positive', 1: 'negative'},
                                                max_seq_length=max_seq_length,)
         gold_labels = {"positive":0, "negative":1}
@@ -59,31 +60,35 @@ def get_task_data(task_name: str, batch_size: int,
             label_field_name="label",
             input_template="nsmc sentiment classification: {{ input }}",
             label_template="{{ label }}",
-            tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+            tokenizer=AutoTokenizer.from_pretrained(tokenizer_str, use_auth_token=True),
             label_map={0:'positive', 1:'negative'},
             max_seq_length=max_seq_length,)
         gold_labels = {"positive":0, "negative":1}
     elif task_name == "klue-nli-prompted":
         # Example 2: KLUE-NLI
         data_module = KLUENLIDataModule(batch_size=batch_size)
-        collator = klue.KLUENLIDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+        collator = klue.KLUENLIDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
+                                                                                    use_auth_token=True),
                                             max_seq_length=max_seq_length,)
         gold_labels = {"entailment":0, "neutral":1, "contradiction":2}
     elif task_name == "klue-ynat-prompted":
         # Example: KLUE-YNAT
         data_module = KLUEYNATDataModule(batch_size=batch_size)
-        collator = klue.KLUEYNATDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+        collator = klue.KLUEYNATDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
+                                                                                     use_auth_token=True),
                                             max_seq_length=max_seq_length,)
         gold_labels = {"different":0, "paraphrase":1}
     elif task_name == 'kornli-prompted':
         # Example 3: KorNLI
         data_module = KorNLIDataModule(batch_size=batch_size)
-        collator = klue.KLUENLIDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+        collator = klue.KLUENLIDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
+                                                                                    use_auth_token=True),
                                             max_seq_length=max_seq_length,)
         gold_labels = {"entailment":0, "neutral":1, "contradiction":2}
     elif task_name == 'paws-x-kor':
         data_module = paws_xDataModule(batch_size=batch_size)
-        collator = pawsx.PAWS_XDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+        collator = pawsx.PAWS_XDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
+                                                                                    use_auth_token=True),
                                             max_seq_length=max_seq_length,)
         gold_labels = {'IT/science':0, 'economy':1, 'social':2,
                        'life and culture':3, 'world':4, 'sports':5, 'politics':6}
@@ -93,7 +98,7 @@ def get_task_data(task_name: str, batch_size: int,
         # MTL
         data_module = korTrainTextDataModule(batch_size=batch_size, use_mtl=False)
         collator = korail_internal.korailCollatorV1(
-            tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+            tokenizer=AutoTokenizer.from_pretrained(tokenizer_str, use_auth_token=True),
             label_map=data_module.id_to_label_func(),
             length_limit=max_seq_length)
         """
@@ -101,7 +106,7 @@ def get_task_data(task_name: str, batch_size: int,
                 label_field_name="label",
                 input_template="Classification Test:\n\n{{ input }}",
                 label_template="{{ label }}",
-                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str, use_auth_token=True),
                 # get callable to label mapping
                 label_map=data_module.id_to_label_func(),
                 #label_map=data_module.id_to_label_map_dict(),
@@ -119,7 +124,7 @@ def get_task_data(task_name: str, batch_size: int,
                 label_field_name="label",
                 input_template="Multitask classification:\n\n{{ input }}",
                 label_template="{{ label }}",
-                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str, use_auth_token=True),
                 # get callable to label mapping
                 label_map=data_module.id_to_label_func(),
                 #label_map=data_module.id_to_label_map_dict(),
@@ -134,12 +139,14 @@ def get_task_data(task_name: str, batch_size: int,
                                            ["text", "target_text"], "\t",
                                            valid_proportions, test_proportions,
                                            max_seq_length,
-                                           AutoTokenizer.from_pretrained(tokenizer_str,),
+                                           AutoTokenizer.from_pretrained(tokenizer_str,
+                                                                         use_auth_token=True),
                                            do_truncate,
                                            hf_cache_dir=hf_cache_dir)
         collator = generic.GenericDataCollator(input_field_name="text",
                                                label_field_name="target_text",
-                                               tokenizer=AutoTokenizer.from_pretrained(tokenizer_str),
+                                               tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
+                                                                                       use_auth_token=True),
                                                label_map=None,
                                                max_seq_length=max_seq_length,)
         gold_labels = None

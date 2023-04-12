@@ -57,7 +57,9 @@ def get_adaptered_model(basemodel_instance, adapter_path):
 
         # adapter_conf = PeftConfig.from_pretrained(adapter_path)
         if isinstance(basemodel_instance, str):
-            basemodel_instance = AutoModelForSeq2SeqLM.from_pretrained(basemodel_instance, device_map="auto")
+            basemodel_instance = AutoModelForSeq2SeqLM.from_pretrained(basemodel_instance,
+                                                                       device_map="auto",
+                                                                       use_auth_token=True)
         logger.warning("Prepare PEFT Model from basemodel.")
         return PeftModel.from_pretrained(basemodel_instance, adapter_path)
     except ImportError as e:
@@ -97,12 +99,13 @@ if __name__ == '__main__':
     if args.adapter != "":
         model = get_adaptered_model(args.model, args.adapter)
     else:
-        model = AutoModelForSeq2SeqLM.from_pretrained(args.model, device_map="auto")
+        model = AutoModelForSeq2SeqLM.from_pretrained(args.model, device_map="auto",
+                                                      use_auth_token=True)
 
     if args.tokenizer is not None and args.tokenizer != "":
-        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_auth_token=True)
     else:
-        tokenizer = AutoTokenizer.from_pretrained(args.model)
+        tokenizer = AutoTokenizer.from_pretrained(args.model, use_auth_token=True)
 
     if args.input is not None and args.input != "":
         logger.warning("input file open: %s", args.input)

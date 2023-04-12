@@ -60,12 +60,12 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
             self.hparams.tuning_method = 'finetune'
 
         if hf_config_path != "":
-            model_cfg = AutoConfig.from_pretrained(hf_config_path)
+            model_cfg = AutoConfig.from_pretrained(hf_config_path, use_auth_token=True)
             #self.model = T5ForConditionalGeneration(model_cfg)
             self.model = AutoModelForSeq2SeqLM.from_config(model_cfg)
         elif model_or_path != "":
-            #self.model = T5ForConditionalGeneration.from_pretrained(model_or_path)
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_or_path)
+            #self.model = T5ForConditionalGeneration.from_pretrained(model_or_path, use_auth_token=True)
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_or_path, use_auth_token=True)
         else:
             raise ValueError("assign hf_config_path or model_or_path parameters to initialize model.")
 
@@ -104,7 +104,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         self.tknizer = None
 
         if isinstance(tokenizer, str):
-            self.tknizer = AutoTokenizer.from_pretrained(tokenizer)
+            self.tknizer = AutoTokenizer.from_pretrained(tokenizer, use_auth_token=True)
         elif isinstance(tokenizer, Callable):
             self.tknizer = tokenizer
 
