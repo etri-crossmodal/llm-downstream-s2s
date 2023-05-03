@@ -114,6 +114,8 @@ def get_argparser():
     parser.add_argument("-tuning_method", type=str, default="finetune",
                         help="EXPERIMENTAL: use for parameter-efficient fine-tuning."
                         "you can use one of [lora/prefixtuning/finetune]")
+    parser.add_argument("-gradient_checkpointing", type=int, default=0,
+                        help="Enable Gradient checkpointing. you can use it when you suffering from OOM.")
     return parser
 
 
@@ -137,6 +139,10 @@ if __name__ == '__main__':
         # python 3.6 or more needed to use secrets
         import secrets
         args.seed = secrets.randbelow(1_000_000_000)
+
+    grad_checkpointing = False
+    if args.gradient_checkpointing != 0:
+        grad_checkpointing = True
 
     # global seed 초기화
     random.seed(args.seed)
@@ -270,6 +276,7 @@ if __name__ == '__main__':
         learning_rate=args.learning_rate, warmup_steps=args.warmup_steps,
         train_batch_size=args.batch_size, val_batch_size=args.batch_size,
         tuning_method=args.tuning_method,
+        gradient_checkpointing=grad_checkpointing,
     )
 
     # add checkpoint saver

@@ -49,6 +49,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
                  train_batch_size: int=256, val_batch_size: int=32,
                  num_beams_for_test: int=1, max_predict_length: int=512,
                  tuning_method: str="finetune",
+                 gradient_checkpointing: bool=False,
                  **kwargs):
         super(ETRIT5ConditionalGenModelLightningModule, self).__init__()
         self.save_hyperparameters(ignore=['data_collator',])
@@ -102,6 +103,10 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         self.data_collator = data_collator
         self.acc_metric = evaluate.load("accuracy")
         self.tknizer = None
+
+        if self.hparams.tuning_method == "finetune" and gradient_checkpointing is True:
+            print("** Gradient Checkpointing Enabled, and computation cache will be disabled.")
+            self.model.gradient_checkpointing_enable()
 
         if isinstance(tokenizer, str):
             self.tknizer = AutoTokenizer.from_pretrained(tokenizer, use_auth_token=True)
