@@ -132,14 +132,16 @@ if __name__ == '__main__':
             outputs = do_generate(args, model, tokenizer, inputs)
             output_strs = tokenizer.batch_decode(outputs, skip_special_tokens=True,)
             for output in output_strs:
-                out_f.write(output + '\n')
+                output = output.replace("\n", "")
+                out_f.write(output.strip() + '\n')
             inputs = []
 
     if len(inputs) != 0:
         outputs = do_generate(args, model, tokenizer, inputs)
         output_strs = tokenizer.batch_decode(outputs, skip_special_tokens=True,)
         for output in output_strs:
-            out_f.write(output + '\n')
+            output = output.replace("\n", "")
+            out_f.write(output.strip() + '\n')
         inputs = []
 
     in_f.close()

@@ -22,7 +22,6 @@ from transformers.models.t5.modeling_t5 import T5Block
 from pytorch_lightning.strategies import DeepSpeedStrategy
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 # we need pytorch 1.12+
-from pytorch_lightning.strategies import DDPFullyShardedNativeStrategy
 from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
 from packaging.version import Version
 
@@ -114,6 +113,8 @@ def get_argparser():
     parser.add_argument("-tuning_method", type=str, default="finetune",
                         help="EXPERIMENTAL: use for parameter-efficient fine-tuning."
                         "you can use one of [lora/prefixtuning/finetune]")
+    parser.add_argument("-gradient_checkpointing", type=int, default=0,
+                        help="Enable Gradient checkpointing. you can use it when you suffering from OOM.")
     return parser
 
 
@@ -137,6 +138,10 @@ if __name__ == '__main__':
         # python 3.6 or more needed to use secrets
         import secrets
         args.seed = secrets.randbelow(1_000_000_000)
+
+    grad_checkpointing = False
+    if args.gradient_checkpointing != 0:
+        grad_checkpointing = True
 
     # global seed 초기화
     random.seed(args.seed)
@@ -193,19 +198,24 @@ if __name__ == '__main__':
 
     if args.strategy == "fsdp_native_cpu_offload":
         raise NotImplementedError("ERROR: Not working properly, need to FIX; disabled for now.")
-        print("** Strategy: fsdp_native+cpu offload")
-        t5_auto_wrap_policy = functools.partial(
-                transformer_auto_wrap_policy,
-                transformer_layer_cls={ T5Block, },)
-        fsdp_kwargs = { "auto_wrap_policy": t5_auto_wrap_policy, }
+        try:
+            from pytorch_lightning.strategies import DDPFullyShardedNativeStrategy
 
-        strat_instance = DDPFullyShardedNativeStrategy(cpu_offload=CPUOffload(offload_params=True),
-                                                       **fsdp_kwargs)
+            print("** Strategy: fsdp_native+cpu offload")
+            t5_auto_wrap_policy = functools.partial(
+                    transformer_auto_wrap_policy,
+                    transformer_layer_cls={ T5Block, },)
+            fsdp_kwargs = { "auto_wrap_policy": t5_auto_wrap_policy, }
+
+            strat_instance = DDPFullyShardedNativeStrategy(cpu_offload=CPUOffload(offload_params=True),
+                                                           **fsdp_kwargs)
+        except ImportError as e:
+            raise e
     elif args.strategy == "deepspeed_1":
         # just partition optimizer states, so we can use any optimizers with it.
         strat_instance = DeepSpeedStrategy(stage=1, remote_device="gpu",
                                            reduce_bucket_size=2e8,
-                                           logging_batch_size_per_gpu=args.train_batch_size)
+                                           logging_batch_size_per_gpu=args.batch_size)
     elif args.strategy == "deepspeed_2_fusedadam":
         # uses more VRAM ~5GB from deepspeed_2_optim_offload + cpuadam.
         optimizer_arg = "fusedadam"
@@ -216,7 +226,7 @@ if __name__ == '__main__':
                                            reduce_bucket_size=2e8,
                                            contiguous_gradients=True, overlap_comm=True,
                                            partition_activations=True, cpu_checkpointing=True,
-                                           logging_batch_size_per_gpu=args.train_batch_size)
+                                           logging_batch_size_per_gpu=args.batch_size)
     elif args.strategy == "deepspeed_2_optim_offload":
         print("** Strategy: Microsoft DeepSpeed Zero 2 + Optimizer Offload")
         optimizer_arg = "cpuadam"
@@ -270,6 +280,7 @@ if __name__ == '__main__':
         learning_rate=args.learning_rate, warmup_steps=args.warmup_steps,
         train_batch_size=args.batch_size, val_batch_size=args.batch_size,
         tuning_method=args.tuning_method,
+        gradient_checkpointing=grad_checkpointing,
     )
 
     # add checkpoint saver
