@@ -117,6 +117,39 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         #print(type(inputs["input_ids"]))
         return self.model(**inputs)
 
+    def freeze_shared_embeddings(self, freeze=True):
+        whole = self.model
+        print(f"** Freeze Shared embedding ({freeze})")
+        whole.shared.weight.requires_grad = not freeze
+
+    def freeze_encoder(self, freeze=True):
+        """
+        T5 구조 상, embeddings가 frozen 되면 model.shared.weight도 frozen,
+        디코더의 embed_tokens.weight도 frozen 됨. encoder/decoder를 따로 분리 불가능
+        """
+        blacklist = []
+        blacklist.append('embed_tokens.weight')
+
+        print(f"** Freeze Encoder ({freeze})")
+        enc = self.model.encoder
+        for name, param in enc.named_parameters():
+            if name not in blacklist:
+                param.requires_grad = not freeze
+            else:
+                param.requires_grad = freeze
+
+    def freeze_decoder(self, freeze=True):
+        blacklist = []
+        blacklist.append('embed_tokens.weight')
+        print(f"** Freeze Decoder ({freeze})")
+
+        dec = self.model.decoder
+        for name, param in dec.named_parameters():
+            if name not in blacklist:
+                param.requires_grad = not freeze
+            else:
+                param.requires_grad = freeze
+
     def configure_optimizers(self):
         """ Prepare optimizer and scheduler.
 

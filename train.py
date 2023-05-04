@@ -115,6 +115,10 @@ def get_argparser():
                         "you can use one of [lora/prefixtuning/finetune]")
     parser.add_argument("-gradient_checkpointing", type=int, default=0,
                         help="Enable Gradient checkpointing. you can use it when you suffering from OOM.")
+    parser.add_argument("-freeze", type=str, action="append",
+                        help="freeze given layer. you can assign multiple target while "
+                        "repeating -freeze option. candidates are: "
+                        "['embedding', 'encoder', 'decoder',] for T5 model.")
     return parser
 
 
@@ -282,6 +286,15 @@ if __name__ == '__main__':
         tuning_method=args.tuning_method,
         gradient_checkpointing=grad_checkpointing,
     )
+
+    if args.freeze is not None:
+        for target in args.freeze:
+            if target == "embedding":
+                model.freeze_shared_embeddings(True)
+            elif target == "encoder":
+                model.freeze_encoder(True)
+            elif target == "decoder":
+                model.freeze_decoder(True)
 
     # add checkpoint saver
     # 이건 gradient acc때문임: every_n_train_steps * gradient_acc = 실제 저장되는 시점
