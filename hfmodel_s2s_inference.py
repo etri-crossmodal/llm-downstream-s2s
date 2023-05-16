@@ -11,6 +11,7 @@ import logging
 
 import tqdm
 import torch
+import GBSWT5
 
 from transformers import (
     AutoModelForSeq2SeqLM, AutoTokenizer, utils
@@ -101,6 +102,8 @@ if __name__ == '__main__':
     else:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model, device_map="auto",
                                                       use_auth_token=True)
+        #model = GBSWT5.GBSWT5ForConditionalGeneration.from_pretrained(args.model, device_map="auto",
+        #                                                              use_auth_token=True)
 
     if args.tokenizer is not None and args.tokenizer != "":
         tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_auth_token=True)

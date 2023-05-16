@@ -326,7 +326,7 @@ if __name__ == '__main__':
         auto_insert_metric_name=False,
         every_n_train_steps=None,
         every_n_epochs=1,
-        save_top_k=-1,
+        save_top_k=10,
         train_time_interval=None,
     )
     callbacks.append(checkpoint_cb_by_ep)
