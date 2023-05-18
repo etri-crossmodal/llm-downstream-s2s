@@ -10,3 +10,4 @@ jellyfish
 sentencepiece
 # needs hf accelerator
 peft
+einops
