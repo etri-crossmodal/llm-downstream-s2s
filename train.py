@@ -119,6 +119,8 @@ def get_argparser():
                         help="freeze given layer. you can assign multiple target while "
                         "repeating -freeze option. candidates are: "
                         "['embedding', 'encoder', 'decoder',] for T5 model.")
+    parser.add_argument("-tokenizer", type=str, default=None,
+                        help="Override Tokenizer for given model configuration. use only testing purposes.")
     return parser
 
 
@@ -155,6 +157,9 @@ if __name__ == '__main__':
 
     accelerator_args = "gpu"
     accelerator_counts = args.gpus
+
+    if args.tokenizer is None:
+        args.tokenizer = args.init_model
 
     if args.gpus <= 0:
         accelerator_args = "cpu"
@@ -259,13 +264,13 @@ if __name__ == '__main__':
     else:
         if args.strategy != "ddp":
             print("** Unknown strategy: set to ddp.")
-        strat_instance = "ddp"
+        strat_instance = "ddp_find_unused_parameters_false"
 
     # ================ FIXME for Training ==================
     # FIXME: task config를 별도로 두도록 하여 인자 수를 간소화하고,
     # 확장성을 확보해야 함
     data_module, collator, label_id_map = task_utils.get_task_data(
-        args.task, args.batch_size, args.init_model,
+        args.task, args.batch_size, args.tokenizer,
         args.train_data, args.valid_data, args.test_data,
         args.valid_data_proportions, args.test_data_proportions,
         args.max_seq_length, args.do_truncate,
@@ -278,7 +283,7 @@ if __name__ == '__main__':
 
     model = ETRIT5ConditionalGenModelLightningModule(
         args.config_path, args.init_model,
-        tokenizer=args.init_model,
+        tokenizer=args.tokenizer,
         data_collator=collator,
         optimizer=optimizer_arg,
         learning_rate=args.learning_rate, warmup_steps=args.warmup_steps,
