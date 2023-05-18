@@ -37,16 +37,6 @@ class GBSWT5Stack(T5Stack):
     def __init__(self, config: GBSWT5Config, embed_tokens :nn.Embedding=None):
         super(T5PreTrainedModel, self).__init__(config)
 
-        # override some default missing parameters for pretrained ByT5 models (e.g. google/byt5-small)
-        if not hasattr(config, 'max_subword_block_size'):
-            config.max_subword_block_size = None
-        if not hasattr(config, 'subword_blocks'):
-            config.subword_blocks = ((1, 0), (2, 0), (3, 0), (4, 0), (6, 0), (9, 0),)
-        if not hasattr(config, 'downsample_factor'):
-            config.downsample_factor = 1
-        if not hasattr(config, 'score_consensus_attn'):
-            config.score_consensus_attn = True
-
         # override embed_tokens, apply GBWST
         self.embed_tokens = GBSWT(embed_tokens=embed_tokens,
                                   max_block_size=config.max_subword_block_size,
@@ -280,6 +270,7 @@ class GBSWT5Stack(T5Stack):
                 ]
                 if v is not None
             )
+
         # must be return downsampled attention_mask
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
@@ -295,6 +286,16 @@ class GBSWT5Model(T5Model):
 
     def __init__(self, config: GBSWT5Config):
         """ override T5Model """
+        # override some default missing parameters for pretrained ByT5 models (e.g. google/byt5-small)
+        if not hasattr(config, 'max_subword_block_size'):
+            config.max_subword_block_size = None
+        if not hasattr(config, 'subword_blocks'):
+            config.subword_blocks = ((1, 0), (2, 0), (3, 0), (4, 0), (6, 0), (9, 0),)
+        if not hasattr(config, 'downsample_factor'):
+            config.downsample_factor = 1
+        if not hasattr(config, 'score_consensus_attn'):
+            config.score_consensus_attn = True
+
         super(T5PreTrainedModel, self).__init__(config)
 
         # override config class for AutoModel
@@ -423,6 +424,16 @@ class GBSWT5ForConditionalGeneration(T5ForConditionalGeneration):
     config_class = GBSWT5Config
 
     def __init__(self, config: GBSWT5Config):
+        # override some default missing parameters for pretrained ByT5 models (e.g. google/byt5-small)
+        if not hasattr(config, 'max_subword_block_size'):
+            config.max_subword_block_size = None
+        if not hasattr(config, 'subword_blocks'):
+            config.subword_blocks = ((1, 0), (2, 0), (3, 0), (4, 0), (6, 0), (9, 0),)
+        if not hasattr(config, 'downsample_factor'):
+            config.downsample_factor = 1
+        if not hasattr(config, 'score_consensus_attn'):
+            config.score_consensus_attn = True
+
         # Grandparent의 init를 그대로 상속, 나머지는 T5ForConditionalGeneration을 따름
         super(T5PreTrainedModel, self).__init__(config)
         # override config class for AutoModel
