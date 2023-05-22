@@ -11,7 +11,7 @@ from collections import Counter
 from transformers import AutoTokenizer
 
 from datamodules.nsmc_pldm import NSMCDataModule
-from datamodules.klue_nli_pldm import KLUENLIDataModule, KLUEYNATDataModule
+from datamodules.klue_nli_pldm import KLUENLIDataModule, KLUEYNATDataModule, KLUEMRCDataModule
 from datamodules.kornli_pldm import KorNLIDataModule
 from datamodules.pawsx_pldm import paws_xDataModule
 from datamodules.kortrain_test import korTrainTextDataModule
@@ -133,6 +133,16 @@ def get_task_data(task_name: str, batch_size: int,
         # FIXME: 현재는 label을 얻기 위해 data_module.setup()을 호출해야 함.
         data_module.setup()
         gold_labels = data_module.label_to_id_map_dict()
+    elif task_name == 'klue-mrc':
+        # klue_datamodules에 포함된 데이터셋을 사용한 학습 및 평가 체계 예시.
+        # data module만 별도로 사용.
+        data_module = KLUEMRCDataModule(valid_proportions=0.05,
+                                        batch_size=batch_size)
+        collator = klue.KLUEMRCDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
+                                                                                    use_auth_token=True),
+                                            label_map=None,
+                                            max_seq_length=max_seq_length,)
+        gold_labels = None
     else:
         # generic supervised seq2seq training, with -train_data, -valid_data, -test_data option.
         data_module = GenericTSVDataModule(batch_size, train_data_file, valid_data_file, test_data_file,

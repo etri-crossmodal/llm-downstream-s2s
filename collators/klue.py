@@ -100,3 +100,42 @@ class KLUEYNATDataCollator:
             raise NotImplementedError
 
         return None
+
+
+@dataclass
+class KLUEMRCDataCollator:
+    """
+        KLUE-MRC data collator.
+    """
+    # dataclass definitions
+    tokenizer: Optional[Callable]=field(
+        default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small", return_tensors="pt"))
+    label_map: Union[Dict[Any, str], Callable[Any,Any]]=None
+    max_seq_length: Optional[int]=None
+
+    def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
+        if isinstance(examples, dict):
+            titles = examples['title']
+            contexts = examples['context']
+            questions = examples['question']
+            labels = examples['answers']
+
+            input_texts = []
+            label_texts = []
+            for idx, title in enumerate(titles):
+                # 가장 간단한 접근 - 길이가 문제다. 학습 때는 이렇게 해서는 안됨.
+                input_texts.append(f"MRC:\n\nquestion: {questions[idx]}\n\n"
+                                   f"title: {title}\n\n"
+                                   f"context: {contexts[idx]}")
+                # set shortest label data
+
+            label_texts = labels['text']
+
+            return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
+                                                padding='longest', return_tensors="pt",
+                                                max_length=self.max_seq_length,
+                                                truncation="only_first",))
+        else:
+            raise NotImplementedError
+
+        return None

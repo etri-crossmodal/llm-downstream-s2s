@@ -256,8 +256,22 @@ if __name__ == '__main__':
         results = acc_metric.compute(references=int_lbls, predictions=int_preds)
         print(results)
     else:
-        print("\nWARNING: label-id map dictionary is None, so we cannot evaluate them. "
-              "see task_utils.py:get_task_data()")
+        print("\nWARNING: label-id map dictionary is None, so we evaluate EM/chrF/ROUGE. "
+              "or you can modify task_utils.py:get_task_data()")
+        em_metric = evaluate.load("exact_match")
+        em_res = em_metric.compute(references=test_helper.INFER_LABELS,
+                                   predictions=test_helper.INFER_PREDICTIONS)
+        print(f"Exact Match: {str(em_res)}")
+
+        chrf_metric = evaluate.load("chrf")
+        chrf_res = chrf_metric.compute(references=test_helper.INFER_LABELS,
+                                       predictions=test_helper.INFER_PREDICTIONS)
+        print(f"chrF: {str(chrf_res)}")
+
+        rouge_metric = evaluate.load("rouge")
+        rouge_res = rouge_metric.compute(references=test_helper.INFER_LABELS,
+                                         predictions=test_helper.INFER_PREDICTIONS)
+        print(f"ROUGE Metrics - {str(rouge_res)}")
 
     if args.save_output != "":
         with open(args.save_output, "wt") as out_f:
@@ -268,7 +282,7 @@ if __name__ == '__main__':
     if args.save_label != "":
         if test_helper.INFER_LABELS is not None:
             with open(args.save_label, "wt") as out_f:
-                for item in test_helper.INFER_PREDICTIONS:
+                for item in test_helper.INFER_LABELS:
                     out_f.write(item + '\n')
                 out_f.close()
         else:
