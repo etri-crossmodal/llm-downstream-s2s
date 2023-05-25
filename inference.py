@@ -103,7 +103,7 @@ def get_argparser():
                         "we will randomize seed with secrets.randbelow() function.")
     parser.add_argument("-batch_size", type=int, default=128,
                         help="train/valid data batch size")
-    parser.add_argument("-gpus", type=int, default=4,
+    parser.add_argument("-gpus", type=int, default=1,
                         help="number of accelerators(e.g. GPUs) for training.")
     parser.add_argument("-float_precision", type=int, default=32,
                         help="set floating point precision. default value is 32, you can set 16. "
@@ -181,7 +181,7 @@ if __name__ == '__main__':
         raise Exception("invalid -task option argument.")
     # ==========================================================
 
-    model = ETRIT5ConditionalGenModelLightningModule.load_from_checkpoint(args.model)
+    model = ETRIT5ConditionalGenModelLightningModule.load_from_checkpoint(args.model, strict=False)
 
     # override hyperparameter for prediction
     model.hparams.num_beams_for_test = args.beam_size
@@ -217,9 +217,15 @@ if __name__ == '__main__':
         detokenized_preds = pool.map(_decode_a_batch, test_helper.INFER_PREDICTIONS)
         detokenized_lbls = pool.map(_decode_a_batch, test_helper.INFER_LABELS)
 
-
     test_helper.INFER_LABELS = [item for sublist in detokenized_lbls for item in sublist]
     test_helper.INFER_PREDICTIONS = [item for sublist in detokenized_preds for item in sublist]
+
+    if args.task == 'klue-mrc':
+        base_kluedata_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                         "/datamodules/klue_datasets/")
+        mrcds = load_dataset(path=os.path.join(base_kluedata_dir, "klue_data.py"),
+                             name="mrc", data_dir=base_kluedata_dir)
+        test_helper.INFER_LABELS = mrcds['test']['answers']['text']
 
     print(f"# Test Labels: {len(test_helper.INFER_LABELS)}")
     print(f"# Test Predictions: {len(test_helper.INFER_PREDICTIONS)}")
@@ -283,7 +289,10 @@ if __name__ == '__main__':
         if test_helper.INFER_LABELS is not None:
             with open(args.save_label, "wt") as out_f:
                 for item in test_helper.INFER_LABELS:
-                    out_f.write(item + '\n')
+                    if isinstance(item, list):
+                        out_f.write('\t'.join(item) + '\n')
+                    else:
+                        out_f.write(item + '\n')
                 out_f.close()
         else:
             print("ERROR: -save_label option is not empty, but gold label dataset not found.")

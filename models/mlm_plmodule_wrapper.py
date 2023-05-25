@@ -136,11 +136,13 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
                  data_collator: Optional[Callable[Any,Any]]=None,
                  optimizer: str="cpuadam",
                  learning_rate: float=1e-3, warmup_steps: int=0,
-                 weight_decay: float=0.0, adam_epsilon: float=1e-8,
+                 weight_decay: float=0.0, adam_epsilon: float=1e-7,     # adam_epsilon 1e-8 to 1e-7, for fp16 training.
                  train_batch_size: int=256, val_batch_size: int=32,
                  num_beams_for_test: int=1, max_predict_length: int=512,
                  tuning_method: str="finetune",
                  gradient_checkpointing: bool=False,
+                 optim_cosanneal_gamma=0.75,        # Optimizer: Cosine-Annealing Gamma Hparam
+                 optim_cosanneal_restarts=4,        # Optimizer: Cosine-Annealing Restarting number of times
                  **kwargs):
         super(ETRIT5ConditionalGenModelLightningModule, self).__init__()
         self.save_hyperparameters(ignore=['data_collator',])
@@ -312,10 +314,10 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
             # Cyclic Cosine-Annealing Scheduler with Warm-up.
             scheduler = CosineAnnealingWarmupRestarts(
                 optimizer,
-                first_cycle_steps=self.trainer.estimated_stepping_batches / 4,
+                first_cycle_steps=self.trainer.estimated_stepping_batches / self.hparams.optim_cosanneal_restarts,
                 cycle_mult=1.0, max_lr=self.hparams.learning_rate,
                 min_lr=1e-7, warmup_steps=self.hparams.warmup_steps,
-                gamma=0.75,
+                gamma=self.hparams.optim_cosanneal_gamma,
                 #num_training_steps=self.trainer.estimated_stepping_batches,
             )
 

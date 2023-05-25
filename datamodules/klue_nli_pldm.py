@@ -109,6 +109,9 @@ class KLUEMRCDataModule(pl.LightningDataModule):
         #klue_mrc_whole['train'] = klue_mrc_whole['train'].remove_columns(["plausible_answer",])
         #klue_mrc_whole['test'] = klue_mrc_whole['test'].remove_columns(["plausible_answer",])
 
+        # 데이터 특성 상, question/context+title을 모두 합쳐도 5200 bytes를 넘지 않는다.
+        # max_seq_length가 5200이 넘어가면 별도의 sliding이 필요없다는 뜻.
+
         # split train into train/valid
         splitted_ds = klue_mrc_whole["train"].train_test_split(test_size=self.valid_proportion,)
         self.dataset_train_iter = splitted_ds["train"]
@@ -118,9 +121,11 @@ class KLUEMRCDataModule(pl.LightningDataModule):
         self.dataset_test_iter = klue_mrc_whole["test"]
 
         def filter_longer_answer(example):
-            idx = example['answers']['text'].index(min(example['answers']['text'], key=len))
-            example['answers'] = {'text': example['answers']['text'][idx],
-                                  'start_idx': example['answers']['start_idx'][idx]}
+            #idx = example['answers']['text'].index(min(example['answers']['text'], key=len))
+            #example['answers'] = {'text': example['answers']['text'][idx],
+            #                      'start_idx': example['answers']['start_idx'][idx]}
+            example['answers'] = {'text': example['answers']['text'][-1],
+                                  'start_idx': example['answers']['start_idx'][-1]}
             return example
 
         # 정답이 여러개 인 것이 있을 수 있으므로, 하나로 줄여낸다.

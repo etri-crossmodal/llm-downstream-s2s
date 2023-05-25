@@ -124,9 +124,9 @@ class KLUEMRCDataCollator:
             label_texts = []
             for idx, title in enumerate(titles):
                 # 가장 간단한 접근 - 길이가 문제다. 학습 때는 이렇게 해서는 안됨.
-                input_texts.append(f"MRC:\n\nquestion: {questions[idx]}\n\n"
-                                   f"title: {title}\n\n"
-                                   f"context: {contexts[idx]}")
+                input_texts.append(f"task: MRC\n\nquestion: {questions[idx]}\n\n"
+                                   f"context: {contexts[idx]}\n")
+                #                   f"title: {title}\n")
                 # set shortest label data
 
             label_texts = labels['text']
