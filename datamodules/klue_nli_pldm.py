@@ -118,6 +118,7 @@ class KLUEMRCDataModule(pl.LightningDataModule):
         self.dataset_valid_iter = splitted_ds["test"]
 
         # use validation dataset split as a test
+        #self.dataset_test_iter = klue_mrc_whole["test"].shard(num_shards=100, index=99)
         self.dataset_test_iter = klue_mrc_whole["test"]
 
         def filter_longer_answer(example):

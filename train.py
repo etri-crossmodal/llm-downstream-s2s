@@ -121,6 +121,10 @@ def get_argparser():
                         "['embedding', 'encoder', 'decoder',] for T5 model.")
     parser.add_argument("-tokenizer", type=str, default=None,
                         help="Override Tokenizer for given model configuration. use only testing purposes.")
+    parser.add_argument("-optim_cosanneal_gamma", type=float, default=0.75,
+                        help="Cosine Annealing Gamma hyperparameter.")
+    parser.add_argument("-optim_cosanneal_restarts", type=int, default=4,
+                        help="Cosine Annealing Restart number of times.")
     return parser
 
 
@@ -290,6 +294,8 @@ if __name__ == '__main__':
         train_batch_size=args.batch_size, val_batch_size=args.batch_size,
         tuning_method=args.tuning_method,
         gradient_checkpointing=grad_checkpointing,
+        optim_cosanneal_gamma=args.optim_cosanneal_gamma,
+        optim_cosanneal_restarts=args.optim_cosanneal_restarts,
     )
 
     if args.freeze is not None:
@@ -331,7 +337,7 @@ if __name__ == '__main__':
         auto_insert_metric_name=False,
         every_n_train_steps=None,
         every_n_epochs=1,
-        save_top_k=10,
+        save_top_k=5,
         train_time_interval=None,
     )
     callbacks.append(checkpoint_cb_by_ep)

@@ -5,7 +5,7 @@
 """
 import jellyfish
 
-from typing import Optional, List
+from typing import Optional, List, Union
 from collections import Counter
 
 from transformers import AutoTokenizer
@@ -164,8 +164,13 @@ def get_task_data(task_name: str, batch_size: int,
     return data_module, collator, gold_labels
 
 
-def get_unique_labels(labels: List[str]):
-    cnts = Counter(labels)
+def get_unique_labels(labels: Union[List[str], List[List[str]]]):
+
+    if isinstance(labels[0], str):
+        cnts = Counter(labels)
+    elif isinstance(labels[0], list):
+        # flatten
+        cnts = Counter([item for sublist in labels for item in sublist])
     return cnts
 
 
