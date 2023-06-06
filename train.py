@@ -317,7 +317,7 @@ if __name__ == '__main__':
     if args.save_every > 0:
         checkpoint_cb = ModelCheckpoint(
             dirpath=checkpoint_dirpath,
-            filename='epoch{epoch:02d}-global_step{step}-val_loss{val_loss:.2f}',
+            filename='epoch{epoch:02d}-global_step{step}-val_loss{val_loss:.4f}',
             monitor="val_loss",
             verbose=True,
             auto_insert_metric_name=False,
@@ -335,7 +335,7 @@ if __name__ == '__main__':
     # epoch-wise checkpoint saving
     checkpoint_cb_by_ep = ModelCheckpoint(
         dirpath=checkpoint_dirpath,
-        filename='epoch{epoch:02d}-global_step{step}-val_loss{val_loss:.2f}_endofepoch',
+        filename='epoch{epoch:02d}-global_step{step}-val_loss{val_loss:.4f}_endofepoch',
         monitor="val_loss",
         verbose=True, save_last=True,
         mode="min",
