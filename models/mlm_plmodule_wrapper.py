@@ -349,7 +349,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
 
         n_words = lm_logits.shape[1]
 
-        self.log("train_loss", loss.item(), on_step=True, prog_bar=False, sync_dist=False)
+        self.log("train_loss", loss.item(), on_step=True, prog_bar=True, sync_dist=False)
 
         return loss
 
