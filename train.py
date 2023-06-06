@@ -207,7 +207,12 @@ if __name__ == '__main__':
     # we should use CPU adamW for deepspeed
     if precision_arg == 16 and bf16_ready:
         print("** bfloat16 available: enable bfloat16 training, instead of fp16.")
-        precision_arg = "bf16"
+        # check lightning version >=2 to use "bf16-mixed"
+        # should be one of "64-true", "32-true", "16-mixed", and "bf16-mixed".
+        if Version(pl.__version__) >= Version("2.0"):
+            precision_arg = "bf16-mixed"
+        else:
+            precision_arg = "bf16"
 
     if args.strategy == "fsdp_native_cpu_offload":
         raise NotImplementedError("ERROR: Not working properly, need to FIX; disabled for now.")
