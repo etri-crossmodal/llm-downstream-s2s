@@ -119,6 +119,7 @@ class KLUEMRCDataCollator:
             contexts = examples['context']
             questions = examples['question']
             labels = examples['answers']
+            is_impossibles = examples['plausible_answer']
 
             input_texts = []
             label_texts = []
@@ -128,8 +129,12 @@ class KLUEMRCDataCollator:
                                    f"context: {contexts[idx]}\n")
                 #                   f"title: {title}\n")
                 # set shortest label data
-
-            label_texts = labels['text']
+            for idx, impos in enumerate(is_impossibles):
+                if impos:
+                    # plausible_answer == True ==> no correct answer.
+                    label_texts.append('[답 없음]')
+                else:
+                    label_texts.append(labels['text'][idx])
 
             return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
                                                 padding='longest', return_tensors="pt",

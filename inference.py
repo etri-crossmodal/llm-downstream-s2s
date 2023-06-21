@@ -252,9 +252,14 @@ if __name__ == '__main__':
         for idx, testdata in enumerate(mrcds['test']):
             newtd = {}
             newtd['id'] = str(idx)
+            is_impossible = testdata['plausible_answer']
             ans = testdata['answers']
-            # rename klue mrc answer start_idx to answer_start
-            ans = {'answer_start' if k == 'start_idx' else k:v for k, v in ans.items()}
+            if is_impossible:
+                #print("is impossible!")
+                ans = {'answer_start':[-1], 'text':['[답 없음]']}
+            else:
+                # rename klue mrc answer start_idx to answer_start
+                ans = {'answer_start' if k == 'start_idx' else k:v for k, v in ans.items()}
             test_helper.INFER_LABELS.append({'id': str(idx), 'answers': ans})
         test_helper.INFER_PREDICTIONS = [{'prediction_text': apred, 'id': str(idx)}
                                          for idx, apred in enumerate(test_helper.INFER_PREDICTIONS)]

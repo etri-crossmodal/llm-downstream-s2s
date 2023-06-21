@@ -11,7 +11,8 @@ import pytorch_lightning as pl
 
 from torch.utils.data import DataLoader
 from transformers import (AutoTokenizer, ByT5Tokenizer)
-from datasets import (DatasetDict, Dataset, load_dataset, interleave_datasets, load_from_disk)
+from datasets import (DatasetDict, Dataset, load_dataset,
+                      interleave_datasets, load_from_disk, concatenate_datasets)
 
 class KLUENLIDataModule(pl.LightningDataModule):
     def __init__(self, valid_proportion: float=0.01,
@@ -122,7 +123,8 @@ class KLUEMRCDataModule(pl.LightningDataModule):
         self.dataset_test_iter = klue_mrc_whole["test"]
 
         def filter_longer_answer(example):
-            #idx = example['answers']['text'].index(min(example['answers']['text'], key=len))
+            # max()를 사용한 방법이 좋지는 않았음. EM ~49/ RW ~50
+            #idx = example['answers']['text'].index(max(example['answers']['text'], key=len))
             #example['answers'] = {'text': example['answers']['text'][idx],
             #                      'start_idx': example['answers']['start_idx'][idx]}
             example['answers'] = {'text': example['answers']['text'][-1],
@@ -134,6 +136,38 @@ class KLUEMRCDataModule(pl.LightningDataModule):
         self.dataset_train_iter = self.dataset_train_iter.map(filter_longer_answer)
         self.dataset_valid_iter = self.dataset_valid_iter.map(filter_longer_answer)
         self.dataset_test_iter = self.dataset_test_iter.map(filter_longer_answer)
+
+        # 일단은 정답이 없는게 너무 자주 나타나는 것도 문제가 있는 듯. 노출 정도를 줄여보자.
+        # 심플하게, 정답이 있는 쪽을 1.5배로 oversampling 하도록 한다.
+        have_anss = self.dataset_train_iter.filter(lambda example: example['plausible_answer'] is False)
+        behalf_train = have_anss.shuffle(seed=99).shard(num_shards=2, index=0)
+        self.dataset_train_iter = concatenate_datasets([self.dataset_train_iter, behalf_train])
+
+        """
+        # train은 데이터 보강이 필요하다: 정답이 context에 없을 경우에는 빈 값을 학습해야 함.
+        # --> 2023.06.20. 1/5 증강에서도 너무 많이 틀리는 문제가 있다. 일단 off.
+        have_anss = self.dataset_train_iter.filter(lambda example: example['plausible_answer'] is False)
+        behalf_train = have_anss.shuffle(seed=99).shard(num_shards=5, index=0)
+
+        def _generate_nonanswer(example):
+            if example['plausible_answer'] is True:
+                return example
+
+            lbl = example['answers']['text']
+            ctx_list = example['context'].split(". ")
+            newctx = ''
+            for part in ctx_list:
+                if part.find(lbl) > -1:
+                    continue
+                newctx += part + ". "
+            example['context'] = newctx
+            example['answers'] = {'text': '[답 없음]', 'start_idx': -1}
+            example['plausible_answer'] = True
+            return example
+
+        behalf_train = behalf_train.map(_generate_nonanswer)
+        self.dataset_train_iter = concatenate_datasets([self.dataset_train_iter, behalf_train])
+        """
 
     def train_dataloader(self):
         return DataLoader(self.dataset_train_iter, batch_size=self.batch_size, num_workers=4)
