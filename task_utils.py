@@ -71,13 +71,13 @@ def get_task_data(task_name: str, batch_size: int,
                                                                                     use_auth_token=True),
                                             max_seq_length=max_seq_length,)
         gold_labels = {"entailment":0, "neutral":1, "contradiction":2}
-    elif task_name == "klue-ynat-prompted":
+    elif task_name == "klue-ynat":
         # Example: KLUE-YNAT
         data_module = KLUEYNATDataModule(batch_size=batch_size)
         collator = klue.KLUEYNATDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
                                                                                      use_auth_token=True),
                                             max_seq_length=max_seq_length,)
-        gold_labels = {"different":0, "paraphrase":1}
+        gold_labels = {'IT과학':0, '경제':1, '사회':2, '생활문화':3, '세계':4, '스포츠':5, '정치':6}
     elif task_name == 'kornli-prompted':
         # Example 3: KorNLI
         data_module = KorNLIDataModule(batch_size=batch_size)

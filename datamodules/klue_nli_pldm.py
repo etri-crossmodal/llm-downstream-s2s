@@ -68,7 +68,7 @@ class KLUEYNATDataModule(pl.LightningDataModule):
         basepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "klue_datasets/")
         klue_ynat_whole = load_dataset(
             path=os.path.join(basepath, "klue_data.py"),
-            name="nli", data_dir=basepath)
+            name="ynat", data_dir=basepath)
 
         # split train into train/valid
         splitted_ds = klue_ynat_whole["train"].train_test_split(test_size=self.valid_proportion,)

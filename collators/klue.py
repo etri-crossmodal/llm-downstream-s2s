@@ -71,9 +71,9 @@ class KLUEYNATDataCollator:
     tokenizer: Optional[Callable]=field(
         default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small", return_tensors="pt"))
     label_map: Union[Dict[Any, str], Callable[Any,Any]]=field(
-        default_factory=lambda: {0:'IT/science', 1:'economy',
-                                 2:'social', 3:'life and culture', 4:'world',
-                                 5:'sports', 6:'politics'})
+        default_factory=lambda: {0:'IT과학', 1:'경제',
+                                 2:'사회', 3:'생활문화', 4:'세계',
+                                 5:'스포츠', 6:'정치'})
     max_seq_length: Optional[int]=None
 
     def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
