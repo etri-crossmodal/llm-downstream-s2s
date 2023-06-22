@@ -305,7 +305,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         # huggingface transformers의 NOAM scheduler 구현을 그대로 사용함.
         if self.hparams.optimizer == "adafactor":
             #scheduler = AdafactorSchedule(optimizer)
-            scheduler = get_constant_schedule_with_warmup(
+            scheduler = get_linear_schedule_with_warmup(
                 optimizer,
                 num_warmup_steps=self.hparams.warmup_steps,
                 num_training_steps=self.trainer.estimated_stepping_batches,
@@ -349,7 +349,8 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
 
         n_words = lm_logits.shape[1]
 
-        self.log("train_loss", loss.item(), on_step=True, prog_bar=True, sync_dist=False)
+        # 학습때는 자동으로 로깅되니 별도 로깅 금지
+        #self.log("train_loss", loss.item(), on_step=True, prog_bar=True, sync_dist=False)
 
         return loss
 
