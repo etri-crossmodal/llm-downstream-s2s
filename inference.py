@@ -356,14 +356,14 @@ if __name__ == '__main__':
 
     # save outputs and gold labels
     if args.save_output != "":
-        with open(args.save_output, "wt") as out_f:
+        with open(args.save_output, "wt", encoding="utf-8") as out_f:
             for item in test_helper.INFER_PREDICTIONS:
                 out_f.write(str(item) + '\n')
             out_f.close()
 
     if args.save_label != "":
         if test_helper.INFER_LABELS is not None:
-            with open(args.save_label, "wt") as out_f:
+            with open(args.save_label, "wt", encoding="utf-8") as out_f:
                 for item in test_helper.INFER_LABELS:
                     if isinstance(item, list):
                         out_f.write('\t'.join(item) + '\n')
