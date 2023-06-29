@@ -133,6 +133,7 @@ if __name__ == '__main__':
 
     inputs = []
     for aline in (in_f if progress_total == 0 else tqdm.tqdm(in_f, total=progress_total)):
+        aline = aline.replace(r"\n", "\n")
         inputs.append(aline.strip())
 
         if len(inputs) >= batch_size:
@@ -144,6 +145,7 @@ if __name__ == '__main__':
             inputs = []
 
     if len(inputs) != 0:
+        aline = aline.replace(r"\n", "\n")
         outputs = do_generate(args, model, tokenizer, inputs)
         output_strs = tokenizer.batch_decode(outputs, skip_special_tokens=True,)
         for output in output_strs:
