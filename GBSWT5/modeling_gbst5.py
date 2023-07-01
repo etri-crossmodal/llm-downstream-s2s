@@ -269,7 +269,7 @@ class GBSWT5Stack(T5Stack):
                     all_cross_attentions,
                 ]
                 if v is not None
-            )
+            ), attention_mask
 
         # must be return downsampled attention_mask
         return BaseModelOutputWithPastAndCrossAttentions(

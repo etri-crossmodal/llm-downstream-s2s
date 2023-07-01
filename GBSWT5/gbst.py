@@ -14,7 +14,9 @@ import functools
 import torch
 import torch.nn.functional as F
 
-from torch import einsum, nn
+from typing import Optional
+
+from torch import einsum, nn, Tensor
 from einops.layers.torch import Rearrange
 from einops import rearrange, repeat
 
@@ -26,18 +28,32 @@ _BLOCKS = (
     #(12, 0), (12, 3), (12, 6), (12, 9)
 )
 
-def pad_to_multiple(in_tensor, multiple, *, seq_dim, dim=-1, value=0.0):
+@torch.jit.script
+def pad_to_multiple(in_tensor:Tensor, multiple:int, seq_dim:int,
+                    dim:int, value:Optional[float]):
     seqlen = in_tensor.shape[seq_dim]
     padded_len = math.ceil(seqlen / multiple) * multiple
     if seqlen == padded_len:
         return in_tensor
+    # -- before --
+    #pad_offset = (0,) * (-1 - dim) * 2
+    #return F.pad(in_tensor, (*pad_offset, 0, padded_len - seqlen), value=value)
+    # -- after --
     pad_offset = (0,) * (-1 - dim) * 2
-    return F.pad(in_tensor, (*pad_offset, 0, padded_len - seqlen), value=value)
+    if len(pad_offset) == 0:
+        return F.pad(in_tensor, (0, padded_len - seqlen), value=value)
+    # unpack 2 dims
+    d1, d2 = pad_offset
+    return F.pad(in_tensor, (d1, d2, 0, padded_len - seqlen), value=value)
 
 
-def masked_mean(in_tensor, mask, dim=-1):
+def masked_mean(in_tensor:Tensor, mask:Tensor, dim:int=-1):
     len_diff = len(in_tensor.shape) - len(mask.shape)
-    mask = mask[(..., *((None,) * len_diff))]
+    #print(f"len_diff: {len_diff}, in_tensor.shape: {in_tensor.shape}, mask.shape: {mask.shape}")
+    # shape will differ from 1?
+    #mask = mask[(..., *((None,) * len_diff))]
+    mask = torch.unsqueeze(mask, dim=-len_diff)
+    #print(f"new mask.shape: {mask.shape}")
     in_tensor.masked_fill_(~(mask.bool()), 0.)
 
     total_elems = mask.sum(dim=dim)
@@ -121,18 +137,18 @@ class GBSWT(nn.Module):
     @torch.cuda.amp.autocast()
     def forward(self, in_tensor, attention_mask=None):
         b, s = in_tensor.shape
+        #print(f"initial shape: b, s : {b}, {s}, in_tensor.shape: {in_tensor.shape}")
         mask = attention_mask
         #print(f"mask: {mask}")
         block_multi, ds_factor = self.block_pad_multiple, self.downsample_factor
-        # get divisible length to pad
-        m = math.ceil(s / ds_factor) * ds_factor
 
         in_tensor = self.embeds(in_tensor)
         in_tensor = self.positional_convol(in_tensor)
-        in_tensor = pad_to_multiple(in_tensor, block_multi, seq_dim=1, dim=-2)
-
+        in_tensor = pad_to_multiple(in_tensor, block_multi,
+                                    seq_dim=1, dim=-2, value=0.0)
         if mask is not None:
-            mask = pad_to_multiple(mask, block_multi, seq_dim=1, dim=-1, value=False)
+            mask = pad_to_multiple(mask, block_multi,
+                                   seq_dim=1, dim=-1, value=False)
 
         block_reprs, block_masks = [], []
 
@@ -197,9 +213,21 @@ class GBSWT(nn.Module):
         scores = rearrange(scores, 'b n m -> b n m ()')
         in_tensor = (block_reprs * scores).sum(dim=2)
 
-        in_tensor = in_tensor[:, :m]
+        @torch.jit.script
+        def _reshape_input_tensor(in_tensor:Tensor, s:int, d:int):
+            # get divisible length to pad
+            m = int(math.ceil(s / d) * d)
+            #print(f"_reshape_input_tensor: {m}")
+            return in_tensor[:, :m]
+
+        #print(f"current m: {m}")
+        #in_tensor = in_tensor[:, :m]
+        #if mask is not None:
+        #    mask = mask[:, :m]
+        in_tensor = _reshape_input_tensor(in_tensor, s, ds_factor)
         if mask is not None:
-            mask = mask[:, :m]
+            mask = _reshape_input_tensor(mask, s, ds_factor)
+        #print(f"after_shape: {in_tensor.shape}, {mask.shape}")
 
         # downsample with mean pooling
         in_tensor = rearrange(in_tensor, 'b (n m) d -> b n m d', m=ds_factor)
