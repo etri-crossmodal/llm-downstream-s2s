@@ -49,6 +49,7 @@ class GBSWT5Config(PretrainedConfig):
         subword_blocks=_BLOCKS,
         downsample_factor=1,
         score_consensus_attn=True,
+        z_loss=1e-4,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -77,6 +78,13 @@ class GBSWT5Config(PretrainedConfig):
         self.subword_blocks = subword_blocks
         self.downsample_factor = downsample_factor
         self.score_consensus_attn = score_consensus_attn
+
+        # z_loss for computational stability.
+        # see https://github.com/tensorflow/mesh/blob \
+        #         /fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
+        # (1) logits이 0으로 부터 너무 멀어지게 드리프팅 되지 않도록 하여, bf16에서 발생하는
+        # round-off error를 방지하기 위함. (2) 로짓이 normalized log-probabilities가 되도록 제고한다.
+        self.z_loss = z_loss
 
         if self.subword_blocks is not None and isinstance(self.subword_blocks, list):
             for idx, elem in enumerate(self.subword_blocks):
