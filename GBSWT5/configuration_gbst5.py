@@ -49,7 +49,7 @@ class GBSWT5Config(PretrainedConfig):
         subword_blocks=_BLOCKS,
         downsample_factor=1,
         score_consensus_attn=True,
-        z_loss=1e-4,
+        z_loss=0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size

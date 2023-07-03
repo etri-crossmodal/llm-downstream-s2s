@@ -24,6 +24,11 @@ tests = []
 if __name__ == '__main__':
     if len(list(sys.argv)) > 1:
         TEST_FILE=list(sys.argv)[1]
+        if len(list(sys.argv)) > 2:
+            GOLD_FILE=list(sys.argv)[2]
+    else:
+        print(f"Usage: {list(sys.argv)[0]} {test_filename} {gold_answer_filename}\n")
+        sys.exit(1)
 
     print(f"** READ GOLD File: {GOLD_FILE}")
     gold_raw = []
@@ -52,6 +57,7 @@ if __name__ == '__main__':
         test_f.close()
 
     print(f"golds: #{len(golds)}, tests: #{len(tests)}")
+    assert len(golds) == len(tests)
 
     print(classification_report(golds, tests, labels=gold_label_ids,
                                 target_names=gold_label_names, digits=4))

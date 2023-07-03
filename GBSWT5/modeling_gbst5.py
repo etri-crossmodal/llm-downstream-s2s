@@ -579,9 +579,11 @@ class GBSWT5ForConditionalGeneration(T5ForConditionalGeneration):
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # add z_loss for computational stability in bf16 amp.
             # see https://github.com/huggingface/transformers/pull/10956#issuecomment-820712267
-            if self.config.z_loss != 0.0:
-                log_z = lm_logits.view(-1).logsumexp(-1)
-                loss += self.config.z_loss * log_z.square()
+
+            # jhshin: disable z_loss for finetuning.
+            #if self.config.z_loss != 0.0:
+            #    log_z = lm_logits.view(-1).logsumexp(-1)
+            #    loss += self.config.z_loss * log_z.square()
 
         if not return_dict:
             output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
