@@ -10,6 +10,7 @@ import argparse
 
 from dataclasses import dataclass
 from collections import Counter
+from pathlib import Path
 from datetime import date
 
 import tqdm
@@ -52,6 +53,7 @@ from datamodules.kortrain_test import korTrainTextDataModule
 from collators import (generic, klue, pawsx)
 
 import task_utils
+from datamodules.klue_datasets import klue_eval_util
 
 
 def get_argparser():
@@ -103,7 +105,7 @@ def get_argparser():
                         "we will randomize seed with secrets.randbelow() function.")
     parser.add_argument("-batch_size", type=int, default=128,
                         help="train/valid data batch size")
-    parser.add_argument("-gpus", type=int, default=4,
+    parser.add_argument("-gpus", type=int, default=1,
                         help="number of accelerators(e.g. GPUs) for training.")
     parser.add_argument("-float_precision", type=int, default=32,
                         help="set floating point precision. default value is 32, you can set 16. "
@@ -181,7 +183,18 @@ if __name__ == '__main__':
         raise Exception("invalid -task option argument.")
     # ==========================================================
 
-    model = ETRIT5ConditionalGenModelLightningModule.load_from_checkpoint(args.model)
+    if Path(args.model).is_dir():
+        try:
+            interm_checkpoint_filename = Path(args.model).absolute().joinpath("./pytorch.ckpt")
+            ETRIT5ConditionalGenModelLightningModule.convert_deepspeed_checkpoint_to_fp32(
+                args.model, interm_checkpoint_filename)
+        except:
+            raise Exception("** DeepSpeed Stage 2/3 Checkpoint converting failed. maybe stage1?")
+        model = ETRIT5ConditionalGenModelLightningModule.load_from_checkpoint(interm_checkpoint_filename,
+                                                                              strict=False)
+        os.unlink(interm_checkpoint_filename)
+    else:
+        model = ETRIT5ConditionalGenModelLightningModule.load_from_checkpoint(args.model, strict=False)
 
     # override hyperparameter for prediction
     model.hparams.num_beams_for_test = args.beam_size
@@ -200,8 +213,9 @@ if __name__ == '__main__':
     # learning rate scheduler를 위해서, max_epoch을 충분히 크게 잡을 것.
 
     trainer = pl.Trainer(accelerator=accelerator_args,
-            devices=accelerator_counts, num_nodes=1,
-            precision=precision_arg,
+                         devices=accelerator_counts, num_nodes=1,
+                         precision=precision_arg,
+                         strategy="ddp",
             )
     trainer.test(model, datamodule=data_module)
 
@@ -212,64 +226,149 @@ if __name__ == '__main__':
     # use half of available cores.
     effective_cpu_cnts = len(os.sched_getaffinity(0))//2
 
+    # to remove useless detokenization process
+    if args.task == 'klue-mrc':
+        test_helper.INFER_LABELS = None
+
+    # detokenize predicts and gold labels
     with mp.Pool(processes=effective_cpu_cnts) as pool:
         print(f"Detokenize Predicted Output and labels, with {effective_cpu_cnts} processes.")
-        detokenized_preds = pool.map(_decode_a_batch, test_helper.INFER_PREDICTIONS)
-        detokenized_lbls = pool.map(_decode_a_batch, test_helper.INFER_LABELS)
+        if test_helper.INFER_PREDICTIONS is not None:
+            detokenized_preds = pool.map(_decode_a_batch, test_helper.INFER_PREDICTIONS)
+            test_helper.INFER_PREDICTIONS = [item for sublist in detokenized_preds for item in sublist]
+        if test_helper.INFER_LABELS is not None:
+            detokenized_lbls = pool.map(_decode_a_batch, test_helper.INFER_LABELS)
+            test_helper.INFER_LABELS = [item for sublist in detokenized_lbls for item in sublist]
 
+    if args.task == 'klue-mrc':
+        base_kluedata_dir = os.path.abspath(os.path.dirname(__file__))
+        base_kluedata_dir += "/datamodules/klue_datasets/"
+        mrcds = load_dataset(base_kluedata_dir + "/klue_data.py",
+                             name="mrc", data_dir=base_kluedata_dir)
+        # for testing purposes.
+        #mrcds['test'] = mrcds['test'].shard(num_shards=100, index=99)
 
-    test_helper.INFER_LABELS = [item for sublist in detokenized_lbls for item in sublist]
-    test_helper.INFER_PREDICTIONS = [item for sublist in detokenized_preds for item in sublist]
+        test_helper.INFER_LABELS = []
+        for idx, testdata in enumerate(mrcds['test']):
+            newtd = {}
+            newtd['id'] = str(idx)
+            is_impossible = testdata['plausible_answer']
+            ans = testdata['answers']
+            if is_impossible:
+                #print("is impossible!")
+                ans = {'answer_start':[-1], 'text':['[답 없음]']}
+            else:
+                # rename klue mrc answer start_idx to answer_start
+                ans = {'answer_start' if k == 'start_idx' else k:v for k, v in ans.items()}
+            test_helper.INFER_LABELS.append({'id': str(idx), 'answers': ans})
+        test_helper.INFER_PREDICTIONS = [{'prediction_text': apred, 'id': str(idx)}
+                                         for idx, apred in enumerate(test_helper.INFER_PREDICTIONS)]
 
-    print(f"# Test Labels: {len(test_helper.INFER_LABELS)}")
-    print(f"# Test Predictions: {len(test_helper.INFER_PREDICTIONS)}")
+        # KLUE 평가 방법을 사용한 평가: EM/ROUGE-W
+        em_scores, rouge_scores = [], []
+        for idx, v in enumerate(test_helper.INFER_PREDICTIONS):
+            pred_answer = v['prediction_text']
+            pred_answer = klue_eval_util.normalize_answer_for_klue_mrc(pred_answer)
+            ground_truths = [klue_eval_util.normalize_answer_for_klue_mrc(atruth)
+                             for atruth in test_helper.INFER_LABELS[idx]['answers']['text']]
+            #print(f"pred_answer: {pred_answer}")
+            #print(f"ground truths: {str(ground_truths)}")
 
-    print(f"Predicted Unique labels(will include mis-typed label elements):")
-    uniq_preds = task_utils.get_unique_labels(test_helper.INFER_PREDICTIONS)
-    for k, v in uniq_preds.items():
-        print(f"\tlabel text: [{k}], counts: {v}")
+            em, rouge = klue_eval_util.compute_em_and_rouge_w_score_for_klue_mrc(pred_answer, ground_truths)
+            em_scores.append(em)
+            rouge_scores.append(rouge)
 
-    if label_id_map is not None:
-        print("\n* trying to correct mis-typed labels with levenshtein(edit) distance.")
-        correction_map = task_utils.get_mislabel_correction_map(label_id_map, uniq_preds)
+        print(f'(Official) KLUE MRC Eval - "exact_match": {np.mean(em_scores)}, "rouge": {np.mean(rouge_scores)}')
 
-        if len(correction_map) > 0:
-            print("correction map:")
-            for k, v in correction_map.items():
-                print(f"\t{k} -> {v}")
-            print("\nCORRECTED Uniq Labels and stats:")
-            for idx, v in enumerate(test_helper.INFER_PREDICTIONS):
-                if v in correction_map:
-                    test_helper.INFER_PREDICTIONS[idx] = correction_map[v]
-            corr_cnts = Counter(test_helper.INFER_PREDICTIONS)
-            for k, v in corr_cnts.items():
-                print(f"\tlabel text: [{k}], counts: {v}")
-        else:
-            print("** all tag labels are clean, so we don't need correction map. nice! **")
+        # hf evaluate를 사용한 평가.
+        squad_metric = evaluate.load("squad")
+        squad_res = squad_metric.compute(references=test_helper.INFER_LABELS,
+                                         predictions=test_helper.INFER_PREDICTIONS)
+        print(f"SQuAD Metrics - {str(squad_res)}")
 
-        # label text to label id mapping
-        int_lbls = [label_id_map[x] for x in test_helper.INFER_LABELS]
-        int_preds = [label_id_map[x] for x in test_helper.INFER_PREDICTIONS]
+        # chrf, rouge는 references=[[str],], predictions=[str,] 을 받는다
+        refs = [lbl['answers']['text'] for lbl in test_helper.INFER_LABELS]
+        preds = [prd['prediction_text'] for prd in test_helper.INFER_PREDICTIONS]
 
-        # then calculate accuracy. FIXME: introduce f1 measure.
-        acc_metric = evaluate.load("accuracy")
-        results = acc_metric.compute(references=int_lbls, predictions=int_preds)
-        print(results)
+        """
+        # chrF는 backend인 sacrebleu의 요구사항대로, references 갯수가 모두 같아야 한다.
+        # 그래서 제외됨.
+        chrf_metric = evaluate.load("chrf")
+        chrf_res = chrf_metric.compute(references=refs, predictions=preds)
+        print(f"chrF - {str(chrf_res)}")
+        """
+
+        rouge_metric = evaluate.load("rouge")
+        rouge_res = rouge_metric.compute(references=refs, predictions=preds)
+        print(f"ROUGE Metrics - {str(rouge_res)}")
     else:
-        print("\nWARNING: label-id map dictionary is None, so we cannot evaluate them. "
-              "see task_utils.py:get_task_data()")
+        print(f"# Test Labels: {len(test_helper.INFER_LABELS)}")
+        print(f"# Test Predictions: {len(test_helper.INFER_PREDICTIONS)}")
 
+        print(f"Predicted Unique labels(will include mis-typed label elements):")
+        uniq_preds = task_utils.get_unique_labels(test_helper.INFER_PREDICTIONS)
+        for k, v in uniq_preds.items():
+            print(f"\tlabel text: [{k}], counts: {v}")
+
+        if label_id_map is not None:
+            print("\n* trying to correct mis-typed labels with levenshtein(edit) distance.")
+            correction_map = task_utils.get_mislabel_correction_map(label_id_map, uniq_preds)
+
+            if len(correction_map) > 0:
+                print("correction map:")
+                for k, v in correction_map.items():
+                    print(f"\t{k} -> {v}")
+                print("\nCORRECTED Uniq Labels and stats:")
+                for idx, v in enumerate(test_helper.INFER_PREDICTIONS):
+                    if v in correction_map:
+                        test_helper.INFER_PREDICTIONS[idx] = correction_map[v]
+                corr_cnts = Counter(test_helper.INFER_PREDICTIONS)
+                for k, v in corr_cnts.items():
+                    print(f"\tlabel text: [{k}], counts: {v}")
+            else:
+                print("** all tag labels are clean, so we don't need correction map. nice! **")
+
+            # label text to label id mapping
+            int_lbls = [label_id_map[x] for x in test_helper.INFER_LABELS]
+            int_preds = [label_id_map[x] for x in test_helper.INFER_PREDICTIONS]
+
+            # then calculate accuracy. FIXME: introduce f1 measure.
+            acc_metric = evaluate.load("accuracy")
+            results = acc_metric.compute(references=int_lbls, predictions=int_preds)
+            print(results)
+        else:
+            print("\nWARNING: label-id map dictionary is None, so we evaluate EM/chrF/ROUGE. "
+                  "or you can modify task_utils.py:get_task_data()")
+            em_metric = evaluate.load("exact_match")
+            em_res = em_metric.compute(references=test_helper.INFER_LABELS,
+                                       predictions=test_helper.INFER_PREDICTIONS)
+            print(f"Exact Match: {str(em_res)}")
+
+            chrf_metric = evaluate.load("chrf")
+            chrf_res = chrf_metric.compute(references=test_helper.INFER_LABELS,
+                                           predictions=test_helper.INFER_PREDICTIONS)
+            print(f"chrF: {str(chrf_res)}")
+
+            rouge_metric = evaluate.load("rouge")
+            rouge_res = rouge_metric.compute(references=test_helper.INFER_LABELS,
+                                             predictions=test_helper.INFER_PREDICTIONS)
+            print(f"ROUGE Metrics - {str(rouge_res)}")
+
+    # save outputs and gold labels
     if args.save_output != "":
-        with open(args.save_output, "wt") as out_f:
+        with open(args.save_output, "wt", encoding="utf-8") as out_f:
             for item in test_helper.INFER_PREDICTIONS:
-                out_f.write(item + '\n')
+                out_f.write(str(item) + '\n')
             out_f.close()
 
     if args.save_label != "":
         if test_helper.INFER_LABELS is not None:
-            with open(args.save_label, "wt") as out_f:
-                for item in test_helper.INFER_PREDICTIONS:
-                    out_f.write(item + '\n')
+            with open(args.save_label, "wt", encoding="utf-8") as out_f:
+                for item in test_helper.INFER_LABELS:
+                    if isinstance(item, list):
+                        out_f.write('\t'.join(item) + '\n')
+                    else:
+                        out_f.write(str(item) + '\n')
                 out_f.close()
         else:
             print("ERROR: -save_label option is not empty, but gold label dataset not found.")

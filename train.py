@@ -119,6 +119,12 @@ def get_argparser():
                         help="freeze given layer. you can assign multiple target while "
                         "repeating -freeze option. candidates are: "
                         "['embedding', 'encoder', 'decoder',] for T5 model.")
+    parser.add_argument("-tokenizer", type=str, default=None,
+                        help="Override Tokenizer for given model configuration. use only testing purposes.")
+    parser.add_argument("-optim_cosanneal_gamma", type=float, default=0.75,
+                        help="Cosine Annealing Gamma hyperparameter.")
+    parser.add_argument("-optim_cosanneal_restarts", type=int, default=4,
+                        help="Cosine Annealing Restart number of times.")
     return parser
 
 
@@ -155,6 +161,9 @@ if __name__ == '__main__':
 
     accelerator_args = "gpu"
     accelerator_counts = args.gpus
+
+    if args.tokenizer is None:
+        args.tokenizer = args.init_model
 
     if args.gpus <= 0:
         accelerator_args = "cpu"
@@ -198,7 +207,12 @@ if __name__ == '__main__':
     # we should use CPU adamW for deepspeed
     if precision_arg == 16 and bf16_ready:
         print("** bfloat16 available: enable bfloat16 training, instead of fp16.")
-        precision_arg = "bf16"
+        # check lightning version >=2 to use "bf16-mixed"
+        # should be one of "64-true", "32-true", "16-mixed", and "bf16-mixed".
+        if Version(pl.__version__) >= Version("2.0"):
+            precision_arg = "bf16-mixed"
+        else:
+            precision_arg = "bf16"
 
     if args.strategy == "fsdp_native_cpu_offload":
         raise NotImplementedError("ERROR: Not working properly, need to FIX; disabled for now.")
@@ -259,13 +273,13 @@ if __name__ == '__main__':
     else:
         if args.strategy != "ddp":
             print("** Unknown strategy: set to ddp.")
-        strat_instance = "ddp"
+        strat_instance = "ddp_find_unused_parameters_false"
 
     # ================ FIXME for Training ==================
     # FIXME: task config를 별도로 두도록 하여 인자 수를 간소화하고,
     # 확장성을 확보해야 함
     data_module, collator, label_id_map = task_utils.get_task_data(
-        args.task, args.batch_size, args.init_model,
+        args.task, args.batch_size, args.tokenizer,
         args.train_data, args.valid_data, args.test_data,
         args.valid_data_proportions, args.test_data_proportions,
         args.max_seq_length, args.do_truncate,
@@ -278,13 +292,15 @@ if __name__ == '__main__':
 
     model = ETRIT5ConditionalGenModelLightningModule(
         args.config_path, args.init_model,
-        tokenizer=args.init_model,
+        tokenizer=args.tokenizer,
         data_collator=collator,
         optimizer=optimizer_arg,
         learning_rate=args.learning_rate, warmup_steps=args.warmup_steps,
         train_batch_size=args.batch_size, val_batch_size=args.batch_size,
         tuning_method=args.tuning_method,
         gradient_checkpointing=grad_checkpointing,
+        optim_cosanneal_gamma=args.optim_cosanneal_gamma,
+        optim_cosanneal_restarts=args.optim_cosanneal_restarts,
     )
 
     if args.freeze is not None:
@@ -301,7 +317,7 @@ if __name__ == '__main__':
     if args.save_every > 0:
         checkpoint_cb = ModelCheckpoint(
             dirpath=checkpoint_dirpath,
-            filename='epoch{epoch:02d}-global_step{step}-val_loss{val_loss:.2f}',
+            filename='epoch{epoch:02d}-global_step{step}-val_loss{val_loss:.4f}',
             monitor="val_loss",
             verbose=True,
             auto_insert_metric_name=False,
@@ -319,14 +335,14 @@ if __name__ == '__main__':
     # epoch-wise checkpoint saving
     checkpoint_cb_by_ep = ModelCheckpoint(
         dirpath=checkpoint_dirpath,
-        filename='epoch{epoch:02d}-global_step{step}-val_loss{val_loss:.2f}_endofepoch',
+        filename='epoch{epoch:02d}-global_step{step}-val_loss{val_loss:.4f}_endofepoch',
         monitor="val_loss",
         verbose=True, save_last=True,
         mode="min",
         auto_insert_metric_name=False,
         every_n_train_steps=None,
         every_n_epochs=1,
-        save_top_k=-1,
+        save_top_k=5,
         train_time_interval=None,
     )
     callbacks.append(checkpoint_cb_by_ep)

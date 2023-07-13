@@ -71,9 +71,9 @@ class KLUEYNATDataCollator:
     tokenizer: Optional[Callable]=field(
         default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small", return_tensors="pt"))
     label_map: Union[Dict[Any, str], Callable[Any,Any]]=field(
-        default_factory=lambda: {0:'IT/science', 1:'economy',
-                                 2:'social', 3:'life and culture', 4:'world',
-                                 5:'sports', 6:'politics'})
+        default_factory=lambda: {0:'IT과학', 1:'경제',
+                                 2:'사회', 3:'생활문화', 4:'세계',
+                                 5:'스포츠', 6:'정치'})
     max_seq_length: Optional[int]=None
 
     def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
@@ -96,6 +96,50 @@ class KLUEYNATDataCollator:
             return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
                                                 padding='longest', return_tensors="pt",
                                                 max_length=self.max_seq_length, truncation="only_first",))
+        else:
+            raise NotImplementedError
+
+        return None
+
+
+@dataclass
+class KLUEMRCDataCollator:
+    """
+        KLUE-MRC data collator.
+    """
+    # dataclass definitions
+    tokenizer: Optional[Callable]=field(
+        default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small", return_tensors="pt"))
+    label_map: Union[Dict[Any, str], Callable[Any,Any]]=None
+    max_seq_length: Optional[int]=None
+
+    def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
+        if isinstance(examples, dict):
+            titles = examples['title']
+            contexts = examples['context']
+            questions = examples['question']
+            labels = examples['answers']
+            is_impossibles = examples['plausible_answer']
+
+            input_texts = []
+            label_texts = []
+            for idx, title in enumerate(titles):
+                # 가장 간단한 접근 - 길이가 문제다. 학습 때는 이렇게 해서는 안됨.
+                input_texts.append(f"task: MRC\n\nquestion: {questions[idx]}\n\n"
+                                   f"context: {contexts[idx]}\n")
+                #                   f"title: {title}\n")
+                # set shortest label data
+            for idx, impos in enumerate(is_impossibles):
+                if impos:
+                    # plausible_answer == True ==> no correct answer.
+                    label_texts.append('[답 없음]')
+                else:
+                    label_texts.append(labels['text'][idx])
+
+            return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
+                                                padding='longest', return_tensors="pt",
+                                                max_length=self.max_seq_length,
+                                                truncation="only_first",))
         else:
             raise NotImplementedError
 

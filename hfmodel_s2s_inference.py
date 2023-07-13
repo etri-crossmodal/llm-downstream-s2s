@@ -11,6 +11,7 @@ import logging
 
 import tqdm
 import torch
+import GBSWT5
 
 from transformers import (
     AutoModelForSeq2SeqLM, AutoTokenizer, utils
@@ -41,8 +42,10 @@ def get_argparser():
     parser.add_argument("-t", "--tokenizer", type=str,
                         help="if model path != tokenizer path, "
                         "you can use this argument to assign tokenizer.")
-    parser.add_argument("--max_seq_length", type=int, default=256,
+    parser.add_argument("--max_seq_length", type=int, default=1024,
                         help="maximum additional token/sequence length.")
+    parser.add_argument("--max_gen_length", type=int, default=512,
+                        help="maximum generation token/sequence length.")
     parser.add_argument("--batch_size", type=int, default=32,
                         help="if --input/-i doesn't exist, batch size will set to 1 automatically.")
     parser.add_argument("--beam_size", type=int, default=1,
@@ -84,11 +87,13 @@ def do_generate(args, model_instance, tokenizer_instance, input_b):
     input_tk = tokenizer_instance(input_b,
                                   add_special_tokens=True,
                                   return_tensors="pt", padding=True,
-                                  pad_to_multiple_of=8,)
+                                  pad_to_multiple_of=8,
+                                  max_length=args.max_seq_length,
+                                  truncation="only_first",)
     with torch.no_grad():
         input_tk.to('cuda')
         return model_instance.generate(input_ids=input_tk["input_ids"],
-                                       max_new_tokens=args.max_seq_length,
+                                       max_new_tokens=args.max_gen_length,
                                        num_beams=args.beam_size)
 
 if __name__ == '__main__':
@@ -101,6 +106,8 @@ if __name__ == '__main__':
     else:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model, device_map="auto",
                                                       use_auth_token=True)
+        #model = GBSWT5.GBSWT5ForConditionalGeneration.from_pretrained(args.model, device_map="auto",
+        #                                                              use_auth_token=True)
 
     if args.tokenizer is not None and args.tokenizer != "":
         tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_auth_token=True)
@@ -126,6 +133,7 @@ if __name__ == '__main__':
 
     inputs = []
     for aline in (in_f if progress_total == 0 else tqdm.tqdm(in_f, total=progress_total)):
+        aline = aline.replace(r"\n", "\n")
         inputs.append(aline.strip())
 
         if len(inputs) >= batch_size:
@@ -137,6 +145,7 @@ if __name__ == '__main__':
             inputs = []
 
     if len(inputs) != 0:
+        aline = aline.replace(r"\n", "\n")
         outputs = do_generate(args, model, tokenizer, inputs)
         output_strs = tokenizer.batch_decode(outputs, skip_special_tokens=True,)
         for output in output_strs:

@@ -10,3 +10,8 @@ jellyfish
 sentencepiece
 # needs hf accelerator
 peft
+einops
+# for chrf evalator
+sacrebleu
+# for install google-research/rouge
+rouge-score

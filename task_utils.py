@@ -5,13 +5,13 @@
 """
 import jellyfish
 
-from typing import Optional, List
+from typing import Optional, List, Union
 from collections import Counter
 
 from transformers import AutoTokenizer
 
 from datamodules.nsmc_pldm import NSMCDataModule
-from datamodules.klue_nli_pldm import KLUENLIDataModule, KLUEYNATDataModule
+from datamodules.klue_nli_pldm import KLUENLIDataModule, KLUEYNATDataModule, KLUEMRCDataModule
 from datamodules.kornli_pldm import KorNLIDataModule
 from datamodules.pawsx_pldm import paws_xDataModule
 from datamodules.kortrain_test import korTrainTextDataModule
@@ -71,13 +71,13 @@ def get_task_data(task_name: str, batch_size: int,
                                                                                     use_auth_token=True),
                                             max_seq_length=max_seq_length,)
         gold_labels = {"entailment":0, "neutral":1, "contradiction":2}
-    elif task_name == "klue-ynat-prompted":
+    elif task_name == "klue-ynat":
         # Example: KLUE-YNAT
         data_module = KLUEYNATDataModule(batch_size=batch_size)
         collator = klue.KLUEYNATDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
                                                                                      use_auth_token=True),
                                             max_seq_length=max_seq_length,)
-        gold_labels = {"different":0, "paraphrase":1}
+        gold_labels = {'IT과학':0, '경제':1, '사회':2, '생활문화':3, '세계':4, '스포츠':5, '정치':6}
     elif task_name == 'kornli-prompted':
         # Example 3: KorNLI
         data_module = KorNLIDataModule(batch_size=batch_size)
@@ -133,6 +133,16 @@ def get_task_data(task_name: str, batch_size: int,
         # FIXME: 현재는 label을 얻기 위해 data_module.setup()을 호출해야 함.
         data_module.setup()
         gold_labels = data_module.label_to_id_map_dict()
+    elif task_name == 'klue-mrc':
+        # klue_datamodules에 포함된 데이터셋을 사용한 학습 및 평가 체계 예시.
+        # data module만 별도로 사용.
+        data_module = KLUEMRCDataModule(valid_proportions=0.05,
+                                        batch_size=batch_size)
+        collator = klue.KLUEMRCDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
+                                                                                    use_auth_token=True),
+                                            label_map=None,
+                                            max_seq_length=max_seq_length,)
+        gold_labels = None
     else:
         # generic supervised seq2seq training, with -train_data, -valid_data, -test_data option.
         data_module = GenericTSVDataModule(batch_size, train_data_file, valid_data_file, test_data_file,
@@ -154,8 +164,13 @@ def get_task_data(task_name: str, batch_size: int,
     return data_module, collator, gold_labels
 
 
-def get_unique_labels(labels: List[str]):
-    cnts = Counter(labels)
+def get_unique_labels(labels: Union[List[str], List[List[str]]]):
+
+    if isinstance(labels[0], str):
+        cnts = Counter(labels)
+    elif isinstance(labels[0], list):
+        # flatten
+        cnts = Counter([item for sublist in labels for item in sublist])
     return cnts
 
 
