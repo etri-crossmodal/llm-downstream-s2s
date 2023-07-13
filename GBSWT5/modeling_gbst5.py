@@ -24,7 +24,7 @@ from transformers.modeling_outputs import (
 )
 from transformers.models.t5.modeling_t5 import (
     T5LayerNorm, T5Block, T5Stack,
-    T5Model, T5PreTrainedModel, T5ForConditionalGeneration,
+    T5Model, T5PreTrainedModel, T5ForConditionalGeneration, T5EncoderModel,
     T5_START_DOCSTRING
 )
 
@@ -290,7 +290,7 @@ class GBSWT5Model(T5Model):
         if not hasattr(config, 'max_subword_block_size'):
             config.max_subword_block_size = None
         if not hasattr(config, 'subword_blocks'):
-            config.subword_blocks = ((1, 0), (2, 0), (3, 0), (4, 0), (6, 0), (9, 0),)
+            config.subword_blocks = ((1, 0), (2, 0), (3, 0), (6, 0), (9, 0),)
         if not hasattr(config, 'downsample_factor'):
             config.downsample_factor = 1
         if not hasattr(config, 'score_consensus_attn'):
@@ -428,7 +428,7 @@ class GBSWT5ForConditionalGeneration(T5ForConditionalGeneration):
         if not hasattr(config, 'max_subword_block_size'):
             config.max_subword_block_size = None
         if not hasattr(config, 'subword_blocks'):
-            config.subword_blocks = ((1, 0), (2, 0), (3, 0), (4, 0), (6, 0), (9, 0),)
+            config.subword_blocks = ((1, 0), (2, 0), (3, 0), (6, 0), (9, 0),)
         if not hasattr(config, 'downsample_factor'):
             config.downsample_factor = 1
         if not hasattr(config, 'score_consensus_attn'):
@@ -581,9 +581,9 @@ class GBSWT5ForConditionalGeneration(T5ForConditionalGeneration):
             # see https://github.com/huggingface/transformers/pull/10956#issuecomment-820712267
 
             # jhshin: disable z_loss for finetuning.
-            #if self.config.z_loss != 0.0:
-            #    log_z = lm_logits.view(-1).logsumexp(-1)
-            #    loss += self.config.z_loss * log_z.square()
+            if self.config.z_loss != 0.0:
+                log_z = lm_logits.view(-1).logsumexp(-1)
+                loss += self.config.z_loss * log_z.square()
 
         if not return_dict:
             output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
@@ -600,3 +600,73 @@ class GBSWT5ForConditionalGeneration(T5ForConditionalGeneration):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+
+@add_start_docstrings(
+    "The bare GBSWT5 Model transformer outputting encoder's raw hidden-states without any specific head on top.",
+    T5_START_DOCSTRING,
+)
+class GBSWT5EncoderModel(T5EncoderModel):
+    config_class = GBSWT5Config
+
+    def __init__(self, config: GBSWT5Config):
+        # override some default missing parameters for pretrained ByT5 models (e.g. google/byt5-small)
+        if not hasattr(config, 'max_subword_block_size'):
+            config.max_subword_block_size = None
+        if not hasattr(config, 'subword_blocks'):
+            config.subword_blocks = ((1, 0), (2, 0), (3, 0), (6, 0), (9, 0),)
+        if not hasattr(config, 'downsample_factor'):
+            config.downsample_factor = 1
+        if not hasattr(config, 'score_consensus_attn'):
+            config.score_consensus_attn = True
+
+        # Grandparent의 init를 그대로 상속, 나머지는 T5ForConditionalGeneration을 따름
+        super(T5PreTrainedModel, self).__init__(config)
+        # override config class for AutoModel
+        self.config_class = GBSWT5Config
+        self.base_model_prefix = "GBSWT5"
+
+        self.model_dim = config.d_model
+
+        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+
+        encoder_cfg = copy.deepcopy(config)
+        encoder_cfg.is_decoder = False
+        encoder_cfg.use_cache = False
+        encoder_cfg.is_encoder_decoder = False
+        self.encoder = GBSWT5Stack(encoder_cfg, self.shared)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        return_resized_attention_mask: Optional[bool] = None,
+    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        encoder_outputs, attention_mask = self.encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if return_resized_attention_mask:
+            return encoder_outputs, attention_mask
+
+        return encoder_outputs

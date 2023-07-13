@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
+import GBSWT5
 
 from models.mlm_plmodule_wrapper import ETRIT5ConditionalGenModelLightningModule
 
@@ -49,7 +50,7 @@ if __name__ == '__main__':
 
                 ETRIT5ConditionalGenModelLightningModule.on_load_checkpoint = on_load_checkpoint
                 model = ETRIT5ConditionalGenModelLightningModule.load_from_checkpoint(
-                            args.checkpoint_path + "/checkpoint/mp_rank_00_model_states.pt",
+                            sys.argv[1] + "/checkpoint/mp_rank_00_model_states.pt",
                             strict=False)
             else:
                 # 그 이외의 오류는 그대로 raise
@@ -57,7 +58,8 @@ if __name__ == '__main__':
 
         model.export_hf_model(sys.argv[2])
         # remove intermediate pytorch-lightning checkpoint
-        os.unlink(interm_checkpoint_filename)
+        if interm_checkpoint_filename != "":
+            os.unlink(interm_checkpoint_filename)
     elif Path(sys.argv[1]).is_file():
         # DDP file이면 바로 HF 모델로
         model = ETRIT5ConditionalGenModelLightningModule.load_from_checkpoint(sys.argv[1], strict=False)
