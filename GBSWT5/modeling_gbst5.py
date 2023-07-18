@@ -15,6 +15,8 @@ from typing import Optional, Union, Tuple
 import torch
 
 from torch import nn
+from torch.utils.checkpoint import checkpoint
+
 from transformers import add_start_docstrings
 from transformers.modeling_outputs import (
     BaseModelOutput,
