@@ -50,6 +50,8 @@ def get_argparser():
                         help="if --input/-i doesn't exist, batch size will set to 1 automatically.")
     parser.add_argument("--beam_size", type=int, default=1,
                         help="beam size.")
+    parser.add_argument("--float_precision", type=str, default="fp32",
+                        help="EXPERIMENTAL: can be one of ['fp32', 'bf16', 'fp16'].")
 
     return parser
 
@@ -90,7 +92,7 @@ def do_generate(args, model_instance, tokenizer_instance, input_b):
                                   pad_to_multiple_of=8,
                                   max_length=args.max_seq_length,
                                   truncation="only_first",)
-    with torch.no_grad():
+    with torch.no_grad(), torch.cuda.amp.autocast(dtype=args.float_precision):
         input_tk.to('cuda')
         return model_instance.generate(input_ids=input_tk["input_ids"],
                                        max_new_tokens=args.max_gen_length,
@@ -100,6 +102,15 @@ if __name__ == '__main__':
     parser = get_argparser()
     args = parser.parse_args()
     progress_total = 0
+
+    if args.float_precision == "bf16":
+        print("** EXPERIMENTAL: use bf16 inference.")
+        args.float_precision = torch.bfloat16
+    elif args.float_precision == "fp16":
+        print("** EXPERIMENTAL: use fp16 inference.")
+        args.float_precision = torch.float16
+    else:
+        args.float_precision = torch.float32
 
     if args.adapter != "":
         model = get_adaptered_model(args.model, args.adapter)
