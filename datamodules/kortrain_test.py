@@ -66,6 +66,17 @@ class korTrainTextDataModule(pl.LightningDataModule):
     def test_dataloader(self):
         return DataLoader(self.dataset_test_iter, batch_size=self.batch_size, num_workers=4)
 
+    def predict_dataloader(self):
+        # same as test_dataloader()
+        return DataLoader(self.dataset_test_iter, batch_size=self.batch_size, num_workers=4)
+
+    # dataset을 바로 노출하는 메서드
+    def test_rawdataset(self):
+        return self.dataset_test_iter
+
+    def predict_rawdataset(self):
+        return self.dataset_test_iter
+
     # id -> label. 반드시 korTrainTextDataModule().setup() 호출 후에 valid하다.
     # 그러므로, datacollator와 바인딩하기 위해서는 lazy init를 수행하는 id_to_label()을 쓸 것.
     def id_to_label_map_dict(self):

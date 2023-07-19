@@ -50,6 +50,17 @@ class KLUENLIDataModule(pl.LightningDataModule):
     def test_dataloader(self):
         return DataLoader(self.dataset_test_iter, batch_size=self.batch_size, num_workers=4)
 
+    def predict_dataloader(self):
+        # same as test_dataloader()
+        return DataLoader(self.dataset_test_iter, batch_size=self.batch_size, num_workers=4)
+
+    # dataset을 바로 노출하는 메서드
+    def test_rawdataset(self):
+        return self.dataset_test_iter
+
+    def predict_rawdataset(self):
+        return self.dataset_test_iter
+
 
 class KLUEYNATDataModule(pl.LightningDataModule):
     def __init__(self, valid_proportion: float=0.01,
@@ -86,6 +97,17 @@ class KLUEYNATDataModule(pl.LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(self.dataset_test_iter, batch_size=self.batch_size, num_workers=4)
+
+    def predict_dataloader(self):
+        # same as test_dataloader()
+        return DataLoader(self.dataset_test_iter, batch_size=self.batch_size, num_workers=4)
+
+    # dataset을 바로 노출하는 메서드
+    def test_rawdataset(self):
+        return self.dataset_test_iter
+
+    def predict_rawdataset(self):
+        return self.dataset_test_iter
 
 
 class KLUEMRCDataModule(pl.LightningDataModule):
@@ -177,3 +199,14 @@ class KLUEMRCDataModule(pl.LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(self.dataset_test_iter, batch_size=self.batch_size, num_workers=4)
+
+    def predict_dataloader(self):
+        # same as test_dataloader()
+        return DataLoader(self.dataset_test_iter, batch_size=self.batch_size, num_workers=4)
+
+    # dataset을 바로 노출하는 메서드
+    def test_rawdataset(self):
+        return self.dataset_test_iter
+
+    def predict_rawdataset(self):
+        return self.dataset_test_iter

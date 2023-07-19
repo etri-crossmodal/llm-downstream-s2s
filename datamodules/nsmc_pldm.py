@@ -44,3 +44,12 @@ class NSMCDataModule(pl.LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(self.dataset_test_iter, batch_size=self.batch_size, num_workers=4)
+
+    def predict_dataloader(self):
+        return DataLoader(self.dataset_test_iter, batch_size=self.batch_size, num_workers=4)
+
+    def test_rawdataset(self):
+        return self.dataset_test_iter
+
+    def predict_rawdataset(self):
+        return self.dataset_test_iter
