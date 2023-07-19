@@ -23,8 +23,7 @@ from einops import rearrange, repeat
 
 # Block definition
 _BLOCKS = (
-    (1, 0), (2, 0), (3, 0), (4, 0),
-    (6, 0), (9, 0),
+    (1, 0), (2, 0), (3, 0), (6, 0), (9, 0),
     #(12, 0), (12, 3), (12, 6), (12, 9)
 )
 
@@ -35,10 +34,6 @@ def pad_to_multiple(in_tensor:Tensor, multiple:int, seq_dim:int,
     padded_len = math.ceil(seqlen / multiple) * multiple
     if seqlen == padded_len:
         return in_tensor
-    # -- before --
-    #pad_offset = (0,) * (-1 - dim) * 2
-    #return F.pad(in_tensor, (*pad_offset, 0, padded_len - seqlen), value=value)
-    # -- after --
     pad_offset = (0,) * (-1 - dim) * 2
     if len(pad_offset) == 0:
         return F.pad(in_tensor, (0, padded_len - seqlen), value=value)
@@ -214,11 +209,11 @@ class GBSWT(nn.Module):
         in_tensor = (block_reprs * scores).sum(dim=2)
 
         @torch.jit.script
-        def _reshape_input_tensor(in_tensor:Tensor, s:int, d:int):
+        def _reshape_input_tensor(in_tensor:Tensor, s:int, d:int) -> Tensor:
             # get divisible length to pad
             m = int(math.ceil(s / d) * d)
             #print(f"_reshape_input_tensor: {m}")
-            return in_tensor[:, :m]
+            return torch.narrow(in_tensor, 1, 0, m) # equivalent of in_tensor[:, :m]
 
         #print(f"current m: {m}")
         #in_tensor = in_tensor[:, :m]

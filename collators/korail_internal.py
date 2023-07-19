@@ -46,9 +46,10 @@ class korailCollatorV1:
             #print(f"{input_texts[0]}\n=> {label_texts[0]}")
             # tokenizer 수준에서 truncation을 실시함.
             return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
-                                                padding='longest', return_tensors="pt",
-                                                max_length=length_limit, truncation="only_first",
-                                                ))
+                                                padding='longest', truncation="only_first",
+                                                max_length=self.max_seq_length,
+                                                return_tensors="pt", return_attention_mask=True,)
+                                 )
         else:
             raise NotImplementedError
 

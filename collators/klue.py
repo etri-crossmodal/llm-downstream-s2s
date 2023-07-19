@@ -51,8 +51,10 @@ class KLUENLIDataCollator:
                 raise NotImplementedError
 
             return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
-                                                padding='longest', return_tensors="pt",
-                                                max_length=self.max_seq_length, truncation="only_first",))
+                                                padding='longest', truncation="only_first",
+                                                max_length=self.max_seq_length,
+                                                return_tensors="pt", return_attention_mask=True,)
+                                 )
         else:
             raise NotImplementedError
 
@@ -94,8 +96,10 @@ class KLUEYNATDataCollator:
                 raise NotImplementedError
 
             return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
-                                                padding='longest', return_tensors="pt",
-                                                max_length=self.max_seq_length, truncation="only_first",))
+                                                padding='longest', truncation="only_first",
+                                                max_length=self.max_seq_length,
+                                                return_tensors="pt", return_attention_mask=True,)
+                                 )
         else:
             raise NotImplementedError
 
@@ -137,9 +141,10 @@ class KLUEMRCDataCollator:
                     label_texts.append(labels['text'][idx])
 
             return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
-                                                padding='longest', return_tensors="pt",
+                                                padding='longest', truncation="only_first",
                                                 max_length=self.max_seq_length,
-                                                truncation="only_first",))
+                                                return_tensors="pt", return_attention_mask=True,)
+                                 )
         else:
             raise NotImplementedError
 

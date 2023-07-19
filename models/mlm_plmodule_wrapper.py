@@ -156,11 +156,17 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
 
         if hf_config_path != "":
             model_cfg = AutoConfig.from_pretrained(hf_config_path, use_auth_token=True)
+            if isinstance(model_cfg, GBSWT5.GBSWT5Config):
+                model_cfg.z_loss = 0.0
             #self.model = T5ForConditionalGeneration(model_cfg)
             self.model = AutoModelForSeq2SeqLM.from_config(model_cfg)
         elif model_or_path != "":
             #self.model = T5ForConditionalGeneration.from_pretrained(model_or_path, use_auth_token=True)
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_or_path, use_auth_token=True)
+            model_cfg = AutoConfig.from_pretrained(model_or_path, use_auth_token=True)
+            if isinstance(model_cfg, GBSWT5.GBSWT5Config):
+                model_cfg.z_loss = 0.0      # 학습 성능을 위해 z_loss를 제외
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_or_path, config=model_cfg,
+                                                               use_auth_token=True)
         else:
             raise ValueError("assign hf_config_path or model_or_path parameters to initialize model.")
 
@@ -351,7 +357,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         n_words = lm_logits.shape[1]
 
         # NOTE: lightning < 2 버전에서는 loss가 기본적으로 반환되기 때문에 중복되어 나타남
-        self.log("train_loss", loss.item(), on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        self.log("tr_loss", loss.item(), on_step=True, on_epoch=True, prog_bar=True, logger=True)
 
         return loss
 

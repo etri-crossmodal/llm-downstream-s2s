@@ -120,6 +120,7 @@ class GBSWT5Stack(T5Stack):
         if use_cache is True:
             assert self.is_decoder, f"`use_cache` can only be set to `True` if {self} is used as a decoder"
 
+        # FIXME: attention_mask가 주어지지 않았을 때, 마스크를 올바르게 생성하도록 고쳐야 함
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
         if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
@@ -543,6 +544,9 @@ class GBSWT5ForConditionalGeneration(T5ForConditionalGeneration):
                 decoder_attention_mask = decoder_attention_mask.to(self.decoder.first_device)
 
         # Decode
+        # 만약 modeling_t5.py에서, scores += position_bias_masked 관련해서 tensor 크기 오류가 난다면
+        # attention_mask가 전달되지 않았을 수 있다. tokenizer가 attention_mask를 반환하도록 하고,
+        # forward()때 input_ids와 함께 attention_mask를 반드시 함께 전달해야 한다.
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
