@@ -57,6 +57,7 @@ class KorQuadV1DataModule(pl.LightningDataModule):
 
         # assign test split
         self.dataset_test_iter = test_ds
+        #self.dataset_test_iter = test_ds.shard(num_shards=100, index=99)
 
     def train_dataloader(self):
         return DataLoader(self.dataset_train_iter, batch_size=self.batch_size, num_workers=4)
@@ -66,3 +67,14 @@ class KorQuadV1DataModule(pl.LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(self.dataset_test_iter, batch_size=self.batch_size, num_workers=4)
+
+    def predict_dataloader(self):
+        # same as test_dataloader()
+        return DataLoader(self.dataset_test_iter, batch_size=self.batch_size, num_workers=4)
+
+    # dataset을 바로 노출하는 메서드
+    def test_rawdataset(self):
+        return self.dataset_test_iter
+
+    def predict_rawdataset(self):
+        return self.dataset_test_iter

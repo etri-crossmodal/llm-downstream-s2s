@@ -92,7 +92,7 @@ def do_generate(args, model_instance, tokenizer_instance, input_b):
                                   pad_to_multiple_of=8,
                                   max_length=args.max_seq_length,
                                   truncation="only_first",)
-    with torch.no_grad(), torch.cuda.amp.autocast(dtype=args.float_precision):
+    with torch.no_grad(), torch.autocast("cuda", dtype=args.float_precision):
         input_tk.to('cuda')
         return model_instance.generate(input_ids=input_tk["input_ids"],
                                        max_new_tokens=args.max_gen_length,

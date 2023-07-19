@@ -4,6 +4,8 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import multiprocessing as mp
+import string
+import re
 import random
 import functools
 import argparse
@@ -37,7 +39,6 @@ from pytorch_lightning.callbacks import Callback, ModelCheckpoint, LearningRateM
 from pytorch_lightning.utilities import rank_zero
 
 # we need pytorch 1.12+
-from pytorch_lightning.strategies import DDPFullyShardedNativeStrategy
 from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
 #from torch.distributed.fsdp import (FullyShardedDataParallel as FSDP,
 #        FullStateDictConfig, StateDictType, MixedPrecision)
@@ -217,7 +218,10 @@ if __name__ == '__main__':
                          precision=precision_arg,
                          strategy="ddp",
             )
-    trainer.test(model, datamodule=data_module)
+    pred_outputs = trainer.predict(model, datamodule=data_module)
+
+    test_helper.INFER_LABELS = [x["labels"] for x in pred_outputs]
+    test_helper.INFER_PREDICTIONS = [x["preds"] for x in pred_outputs]
 
     detokenized_preds = []
     def _decode_a_batch(grp):
@@ -227,7 +231,7 @@ if __name__ == '__main__':
     effective_cpu_cnts = len(os.sched_getaffinity(0))//2
 
     # to remove useless detokenization process
-    if args.task == 'klue-mrc':
+    if args.task == 'klue-mrc' or args.task == 'korquad-v1':
         test_helper.INFER_LABELS = None
 
     # detokenize predicts and gold labels
@@ -301,6 +305,56 @@ if __name__ == '__main__':
         rouge_metric = evaluate.load("rouge")
         rouge_res = rouge_metric.compute(references=refs, predictions=preds)
         print(f"ROUGE Metrics - {str(rouge_res)}")
+    elif args.task == 'korquad-v1':
+        def _normalize_answer(s):
+            def remove_(text):
+                ''' 불필요한 기호 제거 '''
+                text = re.sub("'", " ", text)
+                text = re.sub('"', " ", text)
+                text = re.sub('《', " ", text)
+                text = re.sub('》', " ", text)
+                text = re.sub('<', " ", text)
+                text = re.sub('>', " ", text)
+                text = re.sub('〈', " ", text)
+                text = re.sub('〉', " ", text)
+                text = re.sub("\(", " ", text)
+                text = re.sub("\)", " ", text)
+                text = re.sub("‘", " ", text)
+                text = re.sub("’", " ", text)
+                return text
+
+            def white_space_fix(text):
+                return ' '.join(text.split())
+
+            def remove_punc(text):
+                exclude = set(string.punctuation)
+                return ''.join(ch for ch in text if ch not in exclude)
+
+            def lower(text):
+                return text.lower()
+
+            return white_space_fix(remove_punc(lower(remove_(s))))
+
+        from datamodules.korquad_v1 import KorQuadV1DataModule
+        dm = KorQuadV1DataModule(valid_proportions=0.05, batch_size=8)
+        dm.setup()
+        mrcds = dm.test_rawdataset()
+
+        test_helper.INFER_LABELS = []
+
+        for idx, testdata in enumerate(mrcds):
+            newlbls = [_normalize_answer(lblit) for lblit in testdata['label']]
+            ans = {'answer_start':[-1]*len(testdata['label']), 'text': newlbls}
+            test_helper.INFER_LABELS.append({'id': str(idx), 'answers': ans})
+
+        test_helper.INFER_PREDICTIONS = [{'prediction_text': _normalize_answer(apred), 'id': str(idx)}
+                                         for idx, apred in enumerate(test_helper.INFER_PREDICTIONS)]
+        # hf evaluate를 사용한 평가.
+        squad_metric = evaluate.load("squad")
+        squad_res = squad_metric.compute(references=test_helper.INFER_LABELS,
+                                         predictions=test_helper.INFER_PREDICTIONS)
+        print(f"SQuAD Metrics - {str(squad_res)}")
+
     else:
         print(f"# Test Labels: {len(test_helper.INFER_LABELS)}")
         print(f"# Test Predictions: {len(test_helper.INFER_PREDICTIONS)}")

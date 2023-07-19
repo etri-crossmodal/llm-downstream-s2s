@@ -28,6 +28,7 @@ from peft import (get_peft_config, get_peft_model,
                   LoraConfig, PrefixTuningConfig,
                   TaskType)
 
+# DEPRECATED: no more use
 from models import test_helper
 
 
@@ -349,8 +350,8 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
 
         n_words = lm_logits.shape[1]
 
-        # 학습때는 자동으로 로깅되니 별도 로깅 금지
-        #self.log("train_loss", loss.item(), on_step=True, prog_bar=True, sync_dist=False)
+        # NOTE: lightning < 2 버전에서는 loss가 기본적으로 반환되기 때문에 중복되어 나타남
+        self.log("train_loss", loss.item(), on_step=True, on_epoch=True, prog_bar=True, logger=True)
 
         return loss
 
@@ -380,7 +381,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
 
         return { "loss": val_loss, "preds": pred_seq, "labels": labels }
 
-    def test_step(self, batch, batch_idx, dataloader_idx=0):
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
         if self.data_collator is not None:
             batch_in = self.data_collator(batch)
             batch_in = batch_in.to(self.device)
@@ -403,23 +404,15 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
                                       #max_time=5.0,
                                       )
         #print(outputs.cpu().detach().numpy())
-        return { "preds": outputs, "labels": labels }
-
-    def test_epoch_end(self, output_results):
-        if output_results[0]['labels'] is not None:
-            labels = [x['labels'].cpu().detach().numpy() for x in output_results]
-        else:
-            labels = None
-        preds = [x['preds'].cpu().detach().numpy() for x in output_results]
-
-        test_helper.INFER_LABELS = labels
-        test_helper.INFER_PREDICTIONS = preds
+        return { "preds": outputs.numpy(force=True),
+                 "labels": labels.numpy(force=True) if labels is not None else None }
 
     def export_hf_model(self, model_save_path):
         """
         Export model as Huggingface Compatible Model (as T5ForConditionalGeneration)
         """
         # 모델 저장
+        # FIXME: import safetensors 및 safe_serialize=True 추가
         self.model.save_pretrained(model_save_path,
                                    is_main_process=True,
                                    push_to_hub=False,)
