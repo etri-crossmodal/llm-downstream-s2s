@@ -357,7 +357,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         n_words = lm_logits.shape[1]
 
         # NOTE: lightning < 2 버전에서는 loss가 기본적으로 반환되기 때문에 중복되어 나타남
-        self.log("tr_loss", loss.item(), on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        self.log("loss", loss.item(), on_step=True, prog_bar=True, logger=True)
 
         return loss
 
