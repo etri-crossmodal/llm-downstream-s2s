@@ -27,6 +27,10 @@ class KorQuadV1DataCollator:
             questions = examples['question']
             labels = examples['label']
 
+            assert len(questions) == len(labels), \
+                f"length differ: ques: {len(questions)}, lbls: {len(labels)}\n" \
+                f"{str(examples)}"
+
             input_texts = []
             label_texts = []
             for idx, ques in enumerate(questions):
@@ -35,7 +39,8 @@ class KorQuadV1DataCollator:
                                    f"context: {contexts[idx]}\n")
                 # set shortest label data
             for lbl in labels:
-                label_texts.append(lbl[0])
+                outlbl = lbl[0] if lbl[0] is not None else ""
+                label_texts.append(outlbl)
 
             return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
                                                 padding='longest', truncation="only_first",

@@ -357,7 +357,8 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         n_words = lm_logits.shape[1]
 
         # NOTE: lightning < 2 버전에서는 loss가 기본적으로 반환되기 때문에 중복되어 나타남
-        self.log("loss", loss.item(), on_step=True, prog_bar=True, logger=True)
+        self.log("loss", loss.item(), on_step=True, prog_bar=True, logger=True,
+                 batch_size=self.hparams.train_batch_size,)
 
         return loss
 
@@ -410,8 +411,9 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
                                       #max_time=5.0,
                                       )
         #print(outputs.cpu().detach().numpy())
-        return { "preds": outputs.numpy(force=True),
-                 "labels": labels.numpy(force=True) if labels is not None else None }
+        out_dict = { "preds": outputs.numpy(force=True),
+                     "labels": labels.numpy(force=True) if labels is not None else None }
+        return out_dict
 
     def export_hf_model(self, model_save_path):
         """

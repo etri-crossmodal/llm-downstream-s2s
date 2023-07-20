@@ -32,20 +32,20 @@ class KorQuadV1DataModule(pl.LightningDataModule):
         train_data, test_data = [], []
         basepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "korquad/")
         with open(os.path.join(basepath, "korquad_v1.0-train.jsonl"), "rt", encoding="utf-8") as in_f:
-            docid = 0
             for aline in in_f:
                 adoc = json.loads(aline)
-                train_data.append({'id': docid, 'context': adoc['text1'], 'question': adoc['text2'],
-                                   'label': adoc['label']})
-                docid += 1
+
+                # dewrap label[0] - list 타입은 DataLoader를 통해 tuple로 묶이게 된다.
+                train_data.append({'id': adoc['id'], 'context': adoc['text1'], 'question': adoc['text2'],
+                                   'label': adoc['label'][0]})
 
         with open(os.path.join(basepath, "korquad_v1.0-valid.jsonl"), "rt", encoding="utf-8") as in_f:
-            docid = 0
             for aline in in_f:
                 adoc = json.loads(aline)
-                test_data.append({'id': docid, 'context': adoc['text1'], 'question': adoc['text2'],
-                                  'label': adoc['label']})
-                docid += 1
+
+                # dewrap label - list 타입은 DataLoader를 통해 tuple로 묶이게 된다.
+                test_data.append({'id': adoc['id'], 'context': adoc['text1'], 'question': adoc['text2'],
+                                  'label': adoc['label'][0]})
 
         train_ds = Dataset.from_pandas(pd.DataFrame(data=train_data))
         test_ds = Dataset.from_pandas(pd.DataFrame(data=test_data))
@@ -71,6 +71,9 @@ class KorQuadV1DataModule(pl.LightningDataModule):
     def predict_dataloader(self):
         # same as test_dataloader()
         return DataLoader(self.dataset_test_iter, batch_size=self.batch_size, num_workers=4)
+
+    def valid_rawdataset(self):
+        return self.dataset_test_iter
 
     # dataset을 바로 노출하는 메서드
     def test_rawdataset(self):

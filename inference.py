@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from collections import Counter
 from pathlib import Path
 from datetime import date
+from typing import Any
 
 import tqdm
 import numpy as np
@@ -185,15 +186,34 @@ if __name__ == '__main__':
     # ==========================================================
 
     if Path(args.model).is_dir():
+        model = None
         try:
             interm_checkpoint_filename = Path(args.model).absolute().joinpath("./pytorch.ckpt")
             ETRIT5ConditionalGenModelLightningModule.convert_deepspeed_checkpoint_to_fp32(
                 args.model, interm_checkpoint_filename)
-        except:
-            raise Exception("** DeepSpeed Stage 2/3 Checkpoint converting failed. maybe stage1?")
-        model = ETRIT5ConditionalGenModelLightningModule.load_from_checkpoint(interm_checkpoint_filename,
-                                                                              strict=False)
-        os.unlink(interm_checkpoint_filename)
+        except ValueError as e:
+            print("** DeepSpeed Stage 2/3 Checkpoint converting failed. maybe stage1?")
+
+            # Monkey patching a LightningModule.on_load_checkpoint for deepspeed stage 1.
+            def on_load_checkpoint(wouldbe_self, checkpoint: dict[str, Any]) -> None:
+                if "state_dict" in checkpoint:
+                    return
+                state_dict = checkpoint['module']
+                state_dict = {k.partition('module.')[2]: state_dict[k] for k in state_dict.keys()}
+                checkpoint['state_dict'] = state_dict
+                return
+
+            newpath = Path(args.model).absolute().joinpath("checkpoint/mp_rank_00_model_states.pt").as_posix()
+            ETRIT5ConditionalGenModelLightningModule.on_load_checkpoint = on_load_checkpoint
+            model = ETRIT5ConditionalGenModelLightningModule.load_from_checkpoint(
+                        newpath, strict=False)
+            interm_checkpoint_filename = None
+
+        if model is None:
+            model = ETRIT5ConditionalGenModelLightningModule.load_from_checkpoint(interm_checkpoint_filename,
+                                                                                  strict=False)
+        if interm_checkpoint_filename is not None:
+            os.unlink(interm_checkpoint_filename)
     else:
         model = ETRIT5ConditionalGenModelLightningModule.load_from_checkpoint(args.model, strict=False)
 
@@ -339,15 +359,16 @@ if __name__ == '__main__':
         dm = KorQuadV1DataModule(valid_proportions=0.05, batch_size=8)
         dm.setup()
         mrcds = dm.test_rawdataset()
+        mrcds_ids = mrcds['id']
 
         test_helper.INFER_LABELS = []
 
         for idx, testdata in enumerate(mrcds):
             newlbls = [_normalize_answer(lblit) for lblit in testdata['label']]
             ans = {'answer_start':[-1]*len(testdata['label']), 'text': newlbls}
-            test_helper.INFER_LABELS.append({'id': str(idx), 'answers': ans})
+            test_helper.INFER_LABELS.append({'id': str(mrcds_ids[idx]), 'answers': ans})
 
-        test_helper.INFER_PREDICTIONS = [{'prediction_text': _normalize_answer(apred), 'id': str(idx)}
+        test_helper.INFER_PREDICTIONS = [{'prediction_text': _normalize_answer(apred), 'id': str(mrcds_ids[idx])}
                                          for idx, apred in enumerate(test_helper.INFER_PREDICTIONS)]
         # hf evaluate를 사용한 평가.
         squad_metric = evaluate.load("squad")
@@ -355,6 +376,15 @@ if __name__ == '__main__':
                                          predictions=test_helper.INFER_PREDICTIONS)
         print(f"SQuAD Metrics - {str(squad_res)}")
 
+        if args.save_output != "":
+            import json
+
+            with open(args.save_output + ".json", "wt", encoding="utf-8") as out_f:
+                pred_out_dict = {}
+                for item in test_helper.INFER_PREDICTIONS:
+                    pred_out_dict[item['id']] = item['prediction_text']
+                out_f.write(json.dumps(pred_out_dict, ensure_ascii=False))
+                out_f.close()
     else:
         print(f"# Test Labels: {len(test_helper.INFER_LABELS)}")
         print(f"# Test Predictions: {len(test_helper.INFER_PREDICTIONS)}")

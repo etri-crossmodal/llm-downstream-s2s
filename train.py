@@ -230,6 +230,7 @@ if __name__ == '__main__':
         except ImportError as e:
             raise e
     elif args.strategy == "deepspeed_1":
+        print("** Strategy: Microsoft DeepSpeed Zero Stage 1")
         # just partition optimizer states, so we can use any optimizers with it.
         strat_instance = DeepSpeedStrategy(stage=1, remote_device="gpu",
                                            reduce_bucket_size=2e8,
@@ -318,7 +319,10 @@ if __name__ == '__main__':
         checkpoint_cb = ModelCheckpoint(
             dirpath=checkpoint_dirpath,
             filename='epoch{epoch:02d}-global_step{step}-val_loss{val_loss:.4f}',
-            monitor="val_loss",
+            # 모니터링 되는 변수는 self.log(..., on_epoch=True, ...) 일 때 각각 +_epoch 이 붙은
+            # 키로 저장된다. on_step 역시 _step 으로 붙는다는 점에서 같다. logging value를
+            # 모니터링할 때 주의해야 함.
+            monitor="val_loss_epoch",
             verbose=True,
             auto_insert_metric_name=False,
             # 'global_step'은 매뉴얼과 달리 올바르게 monitoring 되지 않는다. 사용하지 말것
@@ -336,7 +340,7 @@ if __name__ == '__main__':
     checkpoint_cb_by_ep = ModelCheckpoint(
         dirpath=checkpoint_dirpath,
         filename='epoch{epoch:02d}-global_step{step}-val_loss{val_loss:.4f}_endofepoch',
-        monitor="val_loss",
+        monitor="val_loss_epoch",
         verbose=True, save_last=True,
         mode="min",
         auto_insert_metric_name=False,
@@ -399,6 +403,7 @@ if __name__ == '__main__':
 
     # first validation for -save_every
     if args.save_every > 0:
+        # FIXME: 이걸 돌려도 val_loss가 기록되지 않는다. 뭐가 문제지?
         print("** Validate Initialized Model before fitting for checkpointing functionality.")
         trainer.validate(model=model, dataloaders=data_module)
 
