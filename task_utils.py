@@ -17,6 +17,7 @@ from datamodules.pawsx_pldm import paws_xDataModule
 from datamodules.kortrain_test import korTrainTextDataModule
 from datamodules.generic_tsv import GenericTSVDataModule
 from datamodules.korquad_v1 import KorQuadV1DataModule
+from datamodules.generic_hfdataset import GenericHFDataModule
 
 from collators import (generic, klue, pawsx, korail_internal, korquad_v1)
 
@@ -149,6 +150,21 @@ def get_task_data(task_name: str, batch_size: int,
         collator = korquad_v1.KorQuadV1DataCollator(
                 tokenizer=AutoTokenizer.from_pretrained(tokenizer_str, use_auth_token=True),
                 label_map=None, max_seq_length=max_seq_length,)
+        gold_labels = None
+    elif task_name == 'hfdataset':
+        # huggingface dataset에서 제공하는 text-label pair dataset
+        data_module = GenericHFDataModule(batch_size, train_data_file, valid_data_file, test_data_file,
+                                          valid_proportions, test_proportions, max_seq_length,
+                                          AutoTokenizer.from_pretrained(tokenizer_str,
+                                                                        use_auth_token=True),
+                                          do_truncate,
+                                          hf_cache_dir=hf_cache_dir)
+        collator = generic.GenericDataCollator(input_field_name="text",
+                                               label_field_name="label",
+                                               tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
+                                                                                       use_auth_token=True),
+                                               label_map=None,
+                                               max_seq_length=max_seq_length,)
         gold_labels = None
     else:
         # generic supervised seq2seq training, with -train_data, -valid_data, -test_data option.
