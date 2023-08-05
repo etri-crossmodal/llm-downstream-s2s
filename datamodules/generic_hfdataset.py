@@ -43,7 +43,7 @@ class GenericHFDataModule(pl.LightningDataModule):
         do_truncate: False일 경우, max_seq_length보다 클 경우 엘리먼트를 제외, True일 경우, 단순 truncate.
         hf_cache_dir: 중간 편집이 있을 경우, hf datasets의 cache dir 위치.
         """
-        super(GenericTSVDataModule, self).__init__()
+        super().__init__()
         self.batch_size = batch_size
         self.train_files = [train_files] if isinstance(train_files, str) else train_files
         self.valid_files = [valid_files] if isinstance(valid_files, str) else valid_files
@@ -108,6 +108,10 @@ class GenericHFDataModule(pl.LightningDataModule):
                 self.dataset_train_iter = self.dataset_train_iter.filter(func, num_proc=2,)
             if self.dataset_valid_iter is not None:
                 self.dataset_valid_iter = self.dataset_valid_iter.filter(func, num_proc=2,)
+
+        print(self.dataset_train_iter)
+        print(self.dataset_valid_iter)
+
         return
 
     def save_to_disk(self, save_path):

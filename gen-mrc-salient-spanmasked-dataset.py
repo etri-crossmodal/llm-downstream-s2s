@@ -11,6 +11,10 @@ from multiprocessing import Pool
 import kss
 from pororo import Pororo
 
+MAX_INPUT_CTX_LEN=1024
+# SPLITS=2면 odd/even으로 masking 함.
+# FIXME: SPLITS가 NER 수 보다 많으면 문제가 될 수 있다. 확인해서 수정 필요함..
+MASKING_SPLITS=2
 
 DCTX = zstd.ZstdDecompressor(max_window_size=2**31)
 
@@ -22,7 +26,6 @@ def read_lines_from_zst_file(zstd_file_path:Path):
 ner = Pororo(task="ner", lang="ko")
 file = Path(list(sys.argv)[1])
 docs = map(json.loads, read_lines_from_zst_file(file))
-MAX_INPUT_CTX_LEN=1024
 
 output_f = open(f"{list(sys.argv)[1]}-salient_span_masked.jsonl", "wt", encoding="utf-8")
 
@@ -32,57 +35,66 @@ for doc in tqdm(docs):
     if last_sents == sents:
         continue
     # 입출력 데이터 쌍을 각각의 string으로 담는다
-    odd_input_ctx, odd_output_lbl, even_input_ctx, even_output_lbl = [], [], [], []
-    current_input_ctx_len, odd_extid_no, even_extid_no = 0, 0, 0
+    input_ctxs, output_lbls = [], []
+    extid_nos = []
+    current_input_ctx_len = 0
+    for i in range(0, MASKING_SPLITS, 1):
+        input_ctxs.append([])
+        output_lbls.append([])
+        extid_nos.append(0)
 
     for sent in sents:
         blen = len(sent.encode('utf-8'))
         if current_input_ctx_len+blen > MAX_INPUT_CTX_LEN:
             # writedown previous ctxs
-            output_f.write(json.dumps({'text': ' '.join(odd_input_ctx), 'label': ' '.join(odd_output_lbl)}, ensure_ascii=False) + "\n")
-            output_f.write(json.dumps({'text': ' '.join(even_input_ctx), 'label': ' '.join(even_output_lbl)}, ensure_ascii=False) + "\n")
-            odd_input_ctx, odd_output_lbl, even_input_ctx, even_output_lbl = [], [], [], []
-            current_input_ctx_len, odd_extid_no, even_extid_no = 0, 0, 0
+            for i in range(0, MASKING_SPLITS, 1):
+                if len(input_ctxs[i]) == 0:
+                    continue
+                output_f.write(json.dumps({'text': ' '.join(input_ctxs[i]), 'label': ' '.join(output_lbls[i])}, ensure_ascii=False) + "\n")
+            # 초기화
+            input_ctxs, output_lbls = [], []
+            extid_nos = []
+            current_input_ctx_len = 0
+            for i in range(0, MASKING_SPLITS, 1):
+                input_ctxs.append([])
+                output_lbls.append([])
+                extid_nos.append(0)
 
         orig_sent = deepcopy(sent)
         # truncate sent to 510 chars
         sent = sent[:510]
-        odd_sent = deepcopy(sent)
-        even_sent = deepcopy(sent)
 
-        odd_output = ""
-        even_output = ""
+        inputs = [""] * MASKING_SPLITS
+        outputs = [""] * MASKING_SPLITS
+        for i in range(0, MASKING_SPLITS, 1):
+            inputs[i] = deepcopy(sent)
 
         ner_list = ([s for s in ner(sent) if s[1] != 'O' ])
 
-        # odd
-        for ne in ner_list[1::2]:
-            # 마스킹 강도를 조절할 필요가 있다: 예) 위치를 먼저 찾고, 이전에 >가 있으면 skip, 아니면 1회만 나타나도록 combinatorial 하게 하던지..
-            # 아니면 한 sentence만 하도록 하던지?
-            odd_sent = odd_sent.replace(ne[0], f"<extra_id_{odd_extid_no}>", 1)
-            odd_output += f" <extra_id_{odd_extid_no}>" + ne[0]
-            odd_extid_no += 1
-        odd_input_ctx.append(odd_sent)
-        odd_output_lbl.append(odd_output)
-
-        # even
-        for ne in ner_list[0::2]:
-            # 마스킹 강도를 조절할 필요가 있다: 예) 위치를 먼저 찾고, 이전에 >가 있으면 skip, 아니면 1회만 나타나도록 combinatorial 하게 하던지..
-            # 아니면 한 sentence만 하도록 하던지?
-            even_sent = even_sent.replace(ne[0], f"<extra_id_{even_extid_no}>", 1)
-            even_output += f" <extra_id_{even_extid_no}>" + ne[0]
-            even_extid_no += 1
-        even_input_ctx.append(even_sent)
-        even_output_lbl.append(even_output)
+        for i in range(0, MASKING_SPLITS, 1):
+            for ne in ner_list[i::MASKING_SPLITS]:
+                inputs[i] = inputs[i].replace(ne[0], f"<extra_id_{extid_nos[i]}", 1)
+                outputs[i] += f" <extra_id_{extid_nos[i]}>" + ne[0]
+                extid_nos[i] += 1
+            input_ctxs[i].append(inputs[i])
+            output_lbls[i].append(outputs[i])
 
         current_input_ctx_len += blen
 
     # document 경계를 넘지 않게 flush 해야 함
-    if len(odd_input_ctx) > 0:
-        output_f.write(json.dumps({'text': ' '.join(odd_input_ctx), 'label': ' '.join(odd_output_lbl)}, ensure_ascii=False) + "\n")
-        output_f.write(json.dumps({'text': ' '.join(even_input_ctx), 'label': ' '.join(even_output_lbl)}, ensure_ascii=False) + "\n")
-        odd_input_ctx, odd_output_lbl, even_input_ctx, even_output_lbl = [], [], [], []
-        current_input_ctx_len, odd_extid_no, even_extid_no = 0, 0, 0
+    if len(input_ctxs[0]) > 0:
+        for i in range(0, MASKING_SPLITS, 1):
+            if len(input_ctxs[i]) == 0:
+                continue
+            output_f.write(json.dumps({'text': ' '.join(input_ctxs[i]), 'label': ' '.join(output_lbls[i])}, ensure_ascii=False) + "\n")
+        # 초기화
+        input_ctxs, output_lbls = [], []
+        extid_nos = []
+        current_input_ctx_len = 0
+        for i in range(0, MASKING_SPLITS, 1):
+            input_ctxs.append([])
+            output_lbls.append([])
+            extid_nos.append(0)
 
     last_sents = sents
 
