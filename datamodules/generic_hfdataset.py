@@ -6,6 +6,8 @@
     load_from_disk()를 사용하여 로딩 가능한 데이터셋에, 지정된 context(text)와
     label feature name을 지정받아, 이를 읽어들이는 간단한 형태의 dataloader.
 """
+import re
+
 from typing import Any, List, Union, Optional, Callable
 from functools import partial
 
@@ -67,9 +69,37 @@ class GenericHFDataModule(pl.LightningDataModule):
             return None
 
         if isinstance(dsets, str):
-            return datasets.load_from_disk(dsets)
+            # get sharding information
+            shard_val = 0
+            sh_srch = re.search(r':([0-9]*)$', dsets)
+            if sh_srch is not None and len(sh_srch.groups()) > 0:
+                shard_val = int(sh_srch.groups()[0])
+                dsets = dsets[:-(len(sh_srch.groups()[0])+1)]
+                print(f"** Sharding suffix detected: 1/{shard_val} of "
+                      f"data samples will be used in {dsets}")
+
+            ads = datasets.load_from_disk(dsets)
+            if shard_val > 0:
+                ads = ads.shuffle()
+                ads = ads.shard(num_shards=shard_val, index=0)
+            return ads
         elif isinstance(dsets, list):
-            dss = [datasets.load_from_disk(ads) for ads in dsets]
+            dss = []
+            for dset in dsets:
+                # get sharding information
+                shard_val = 0
+                sh_srch = re.search(r':([0-9]*)$', dset)
+                if sh_srch is not None and len(sh_srch.groups()) > 0:
+                    shard_val = int(sh_srch.groups()[0])
+                    dset = dset[:-(len(sh_srch.groups()[0])+1)]
+                    print(f"** Sharding suffix detected: 1/{shard_val} of "
+                          f"data samples will be used in {dset}")
+                ads = datasets.load_from_disk(dset)
+                if shard_val > 0:
+                    ads = ads.shuffle()
+                    ads = ads.shard(num_shards=shard_val, index=0)
+                dss.append(ads)
+
             return datasets.concatenate_datasets(dss)
         else:
             raise NotImplementedError("generic_hfdataset: must be str, or list[str].")
