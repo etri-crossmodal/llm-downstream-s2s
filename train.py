@@ -83,6 +83,8 @@ def get_argparser():
     parser.add_argument("-max_epoch", type=int, default=4,
                         help="set maximum epoch limit. this value controls NOAM scheduler. "
                         "DO NOT set to -1(infinite) or >=100, learning rate will not decay properly.")
+    parser.add_argument("-lr_scheduler", type=str, default="cosanneal",
+                        help="LR scheduler. one of ['cosanneal', 'linear'] is supported.")
     parser.add_argument("-learning_rate", type=float, default=1e-4,
                         help="set peak learning rate. see also -warmup_step")
     parser.add_argument("-warmup_steps", type=int, default=0,
@@ -134,6 +136,12 @@ if __name__ == '__main__':
 
     if args.task == "seq2seq" and (args.train_data is None or len(args.train_data) == 0):
         raise ValueError("you must assign -data option when -task seq2seq.")
+
+    if args.task in ["seq2seq", "hfdataset"] and \
+            args.valid_data is None and args.valid_data_proportions == 0.0 and \
+            args.valid_check_interval > 0:
+        raise ValueError("you must assign validation dataset with -valid_data or "
+                         "set parameter -valid_data_proportions to >0 .")
 
     if args.config_path == "" and args.init_model == "":
         raise ValueError("assign -config_path or -init_model to define a model. "
@@ -296,6 +304,7 @@ if __name__ == '__main__':
         tokenizer=args.tokenizer,
         data_collator=collator,
         optimizer=optimizer_arg,
+        lr_scheduler=args.lr_scheduler,
         learning_rate=args.learning_rate, warmup_steps=args.warmup_steps,
         train_batch_size=args.batch_size, val_batch_size=args.batch_size,
         tuning_method=args.tuning_method,

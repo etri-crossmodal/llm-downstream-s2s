@@ -136,6 +136,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
                  tokenizer: Optional[Union[str, Callable]]=None,
                  data_collator: Optional[Callable[Any,Any]]=None,
                  optimizer: str="cpuadam",
+                 lr_scheduler: str="cosanneal",     # LR Scheduler: one of ['cosanneal', 'linear']
                  learning_rate: float=1e-3, warmup_steps: int=0,
                  weight_decay: float=0.0, adam_epsilon: float=1e-7,     # adam_epsilon 1e-8 to 1e-7, for fp16 training.
                  train_batch_size: int=256, val_batch_size: int=32,
@@ -317,7 +318,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
                 num_warmup_steps=self.hparams.warmup_steps,
                 num_training_steps=self.trainer.estimated_stepping_batches,
             )
-        else:
+        elif self.hparams.lr_scheduler == 'cosanneal':
             # Cyclic Cosine-Annealing Scheduler with Warm-up.
             scheduler = CosineAnnealingWarmupRestarts(
                 optimizer,
@@ -328,13 +329,15 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
                 #num_training_steps=self.trainer.estimated_stepping_batches,
             )
 
-            """
+        elif self.hparams.lr_scheduler == 'linear':
             scheduler = get_linear_schedule_with_warmup(
                 optimizer,
                 num_warmup_steps=self.hparams.warmup_steps,
                 num_training_steps=self.trainer.estimated_stepping_batches,
             )
-            """
+        else:
+            raise ValueError(f"undefined LR scheduler assigned: {self.hparams.lr_scheduler}")
+
         scheduler = {"scheduler": scheduler, "interval": "step", "frequency": 1}
         return [optimizer], [scheduler]
 
