@@ -11,7 +11,9 @@ from collections import Counter
 from transformers import AutoTokenizer
 
 from datamodules.nsmc_pldm import NSMCDataModule
-from datamodules.klue_nli_pldm import KLUENLIDataModule, KLUEYNATDataModule, KLUEMRCDataModule
+from datamodules.klue_nli_pldm import (
+        KLUENLIDataModule, KLUEYNATDataModule, KLUEMRCDataModule, KLUENERDataModule
+        )
 from datamodules.kornli_pldm import KorNLIDataModule
 from datamodules.pawsx_pldm import paws_xDataModule
 from datamodules.kortrain_test import korTrainTextDataModule
@@ -65,13 +67,16 @@ def get_task_data(task_name: str, batch_size: int,
             label_map={0:'positive', 1:'negative'},
             max_seq_length=max_seq_length,)
         gold_labels = {"positive":0, "negative":1}
-    elif task_name == "klue-nli-prompted":
+    elif task_name == "klue-nli":
         # Example 2: KLUE-NLI
+        base_tag_pair = {"<extra_id_0>":0, "<extra_id_1>":1, "<extra_id_2>":2}
+        #base_tag_pair = {"함의":0, "중립":1, "모순":2}
         data_module = KLUENLIDataModule(batch_size=batch_size)
-        collator = klue.KLUENLIDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
-                                                                                    use_auth_token=True),
-                                            max_seq_length=max_seq_length,)
-        gold_labels = {"entailment":0, "neutral":1, "contradiction":2}
+        collator = klue.KLUENLIDataCollator(tokenizer=AutoTokenizer.from_pretrained(
+            tokenizer_str, use_auth_token=True),
+            label_map=dict([(v, k) for k, v in base_tag_pair.items()]), # invert k-v pair
+            max_seq_length=max_seq_length,)
+        gold_labels = base_tag_pair
     elif task_name == "klue-ynat":
         # Example: KLUE-YNAT
         data_module = KLUEYNATDataModule(batch_size=batch_size)
@@ -140,6 +145,16 @@ def get_task_data(task_name: str, batch_size: int,
         data_module = KLUEMRCDataModule(valid_proportions=0.05,
                                         batch_size=batch_size)
         collator = klue.KLUEMRCDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
+                                                                                    use_auth_token=True),
+                                            label_map=None,
+                                            max_seq_length=max_seq_length,)
+        gold_labels = None
+    elif task_name == 'klue-ner':
+        # klue_datamodules에 포함된 데이터셋을 사용한 학습 및 평가 체계 예시.
+        # data module만 별도로 사용.
+        data_module = KLUENERDataModule(valid_proportions=0.05,
+                                        batch_size=batch_size)
+        collator = klue.KLUENERDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
                                                                                     use_auth_token=True),
                                             label_map=None,
                                             max_seq_length=max_seq_length,)

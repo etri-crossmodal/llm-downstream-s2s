@@ -18,6 +18,7 @@
 
 import json
 import os
+import re
 
 import datasets
 
@@ -226,6 +227,8 @@ class KLUE(datasets.GeneratorBasedBuilder):
         elif self.config.name == "ner":
             features["sentence"] = datasets.features.Sequence(datasets.Value("string"))
             features["labels"] = datasets.features.Sequence(datasets.features.ClassLabel(names=self.config.label_classes))
+            # jhshin added. 230807.
+            features["tagged_sent"] = datasets.Value("string")
         elif self.config.name == "dp":
             features["ids"] = datasets.features.Sequence(datasets.Value("int32"))
             features["words"] = datasets.features.Sequence(datasets.Value("string"))
@@ -387,6 +390,7 @@ class KLUE(datasets.GeneratorBasedBuilder):
                         d_history.append({"role": role, "text": text})
             elif self.config.name in ["ner", "dp"]:
                 filtered_lines = list(filter(lambda x: not x.startswith("##"), lines))
+                ner_sent_lines = list(filter(lambda x: x.startswith("## klue-ner"), lines))
 
                 size = len(filtered_lines)
                 idx_list = [idx + 1 for idx, val in
@@ -417,6 +421,7 @@ class KLUE(datasets.GeneratorBasedBuilder):
                         yield idx, {
                             "sentence": sent_info[0],
                             "labels": sent_info[1],
+                            "tagged_sent": ner_sent_lines[idx][ner_sent_lines[idx].find("\t")+1:].strip(),
                         }
                     elif self.config.name == "dp":
                         yield idx, {
