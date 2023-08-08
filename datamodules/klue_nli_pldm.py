@@ -235,6 +235,11 @@ class KLUENERDataModule(pl.LightningDataModule):
             path=os.path.join(basepath, "klue_data.py"),
             name="ner", data_dir=basepath)
 
+        # tagged_sent 컬럼을 지우든지, 아니면 이걸 지우든지 해야 함. list - str 엘리먼트 수가 달라서
+        # 발생하는 문제임.
+        klue_ner_whole['test'] = klue_ner_whole['test'].remove_columns(["sentence", "labels",])
+        klue_ner_whole['train'] = klue_ner_whole['train'].remove_columns(["sentence", "labels",])
+
         # split train into train/valid
         #splitted_ds = klue_nli_whole["train"].train_test_split(test_size=self.valid_proportion,)
         #self.dataset_train_iter = splitted_ds["train"]
