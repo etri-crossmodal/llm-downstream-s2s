@@ -70,8 +70,9 @@ def get_task_data(task_name: str, batch_size: int,
         gold_labels = {"positive":0, "negative":1}
     elif task_name == "klue-nli":
         # Example 2: KLUE-NLI
-        base_tag_pair = {"<extra_id_0>":0, "<extra_id_1>":1, "<extra_id_2>":2}
-        #base_tag_pair = {"함의":0, "중립":1, "모순":2}
+        # 단일 토큰 테스트: loss에는 차이가 많이 보이나, 최종 평가에서는 근소한 차이 밖에 나타나지 않음.
+        #base_tag_pair = {"<extra_id_0>":0, "<extra_id_1>":1, "<extra_id_2>":2}
+        base_tag_pair = {"함의":0, "중립":1, "모순":2}
         data_module = KLUENLIDataModule(batch_size=batch_size)
         collator = klue.KLUENLIDataCollator(tokenizer=AutoTokenizer.from_pretrained(
             tokenizer_str, use_auth_token=True),
