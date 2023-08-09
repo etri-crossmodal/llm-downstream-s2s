@@ -1,6 +1,8 @@
-# NER task. 
+# NER task.  _gen_whole_sent 로 끝난 경로는 전체 문장을 복제하면서 생성
+# 그렇지 않은 것은 <어휘:클래스> <어휘:클래스> ... 로 만 예측함
+# collators/klue.py:177~178 을 참고, label texts에 뭐가 들어가는지, only_tags vs sentence로 이해하면 됨 
 python train.py -task klue-ner \
-  -save_path ./DELETEME_finetune_klue_ner_230808 \
+  -save_path ./DELETEME_finetune_klue_ner_230808_gen_whole_sent \
   -init_model ../models/kebyt5-base-gbst_ds3x-preview-230627-ssm-stage2_230805/ \
   -strategy deepspeed_1 -float_precision 32 -max_epoch 4 -gpus 2 \
   -gradient_checkpointing 0 \

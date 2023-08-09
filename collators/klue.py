@@ -174,8 +174,8 @@ class KLUENERDataCollator:
                 only_tags = ' '.join(re.findall("<.+?:[A-Z][A-Z]>", sentence))
                 input_texts.append(f"task: NER\n\nInput: {notag_sent}\n")
                 # set shortest label data
-                #label_texts.append(sentence)
-                label_texts.append(only_tags)
+                label_texts.append(sentence)
+                #label_texts.append(only_tags)
 
             assert len(input_texts) == len(label_texts)
 
