@@ -171,6 +171,8 @@ class GenericTSVDataModule(pl.LightningDataModule):
         self.dataset_valid_iter = self._get_dataset_from_files(self.valid_files)
         self.dataset_train_iter = self._get_dataset_from_files(self.train_files)
 
+        self.dataset_train_iter = self.dataset_train_iter.shuffle(seed=592821)
+
         if self.test_props > 0.0 and self.dataset_test_iter is None:
            tt_split = self.dataset_train_iter.train_test_split(test_size=self.test_props, shuffle=True,
                                                                seed=592821,)
