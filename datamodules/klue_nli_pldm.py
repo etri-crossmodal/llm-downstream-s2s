@@ -34,9 +34,13 @@ class KLUENLIDataModule(pl.LightningDataModule):
             name="nli", data_dir=basepath)
 
         # split train into train/valid
-        splitted_ds = klue_nli_whole["train"].train_test_split(test_size=self.valid_proportion,)
-        self.dataset_train_iter = splitted_ds["train"]
-        self.dataset_valid_iter = splitted_ds["test"]
+        #splitted_ds = klue_nli_whole["train"].train_test_split(test_size=self.valid_proportion,)
+        #self.dataset_train_iter = splitted_ds["train"]
+        #self.dataset_valid_iter = splitted_ds["test"]
+
+        # 임시..
+        self.dataset_train_iter = klue_nli_whole["train"]
+        self.dataset_valid_iter = klue_nli_whole["test"]
 
         # use validation dataset split as a test
         self.dataset_test_iter = klue_nli_whole["test"]
@@ -190,6 +194,63 @@ class KLUEMRCDataModule(pl.LightningDataModule):
         behalf_train = behalf_train.map(_generate_nonanswer)
         self.dataset_train_iter = concatenate_datasets([self.dataset_train_iter, behalf_train])
         """
+
+    def train_dataloader(self):
+        return DataLoader(self.dataset_train_iter, batch_size=self.batch_size, num_workers=4)
+
+    def val_dataloader(self):
+        return DataLoader(self.dataset_valid_iter, batch_size=self.batch_size, num_workers=4)
+
+    def test_dataloader(self):
+        return DataLoader(self.dataset_test_iter, batch_size=self.batch_size, num_workers=4)
+
+    def predict_dataloader(self):
+        # same as test_dataloader()
+        return DataLoader(self.dataset_test_iter, batch_size=self.batch_size, num_workers=4)
+
+    # dataset을 바로 노출하는 메서드
+    def test_rawdataset(self):
+        return self.dataset_test_iter
+
+    def predict_rawdataset(self):
+        return self.dataset_test_iter
+
+
+class KLUENERDataModule(pl.LightningDataModule):
+    def __init__(self, valid_proportion: float=0.01,
+                 batch_size: int=32,
+                 **kwargs):
+        super().__init__()
+        self.valid_proportion = valid_proportion
+        self.batch_size = batch_size
+        return
+
+    def prepare_data(self):
+        return
+
+    def setup(self, stage: str=""):
+        # grab KLUE/NLI dataset from prepared jsonl
+        basepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "klue_datasets/")
+        klue_ner_whole = load_dataset(
+            path=os.path.join(basepath, "klue_data.py"),
+            name="ner", data_dir=basepath)
+
+        # tagged_sent 컬럼을 지우든지, 아니면 이걸 지우든지 해야 함. list - str 엘리먼트 수가 달라서
+        # 발생하는 문제임.
+        klue_ner_whole['test'] = klue_ner_whole['test'].remove_columns(["sentence", "labels",])
+        klue_ner_whole['train'] = klue_ner_whole['train'].remove_columns(["sentence", "labels",])
+
+        # split train into train/valid
+        #splitted_ds = klue_nli_whole["train"].train_test_split(test_size=self.valid_proportion,)
+        #self.dataset_train_iter = splitted_ds["train"]
+        #self.dataset_valid_iter = splitted_ds["test"]
+
+        # 임시..
+        self.dataset_train_iter = klue_ner_whole["train"]
+        self.dataset_valid_iter = klue_ner_whole["test"]
+
+        # use validation dataset split as a test
+        self.dataset_test_iter = klue_ner_whole["test"]
 
     def train_dataloader(self):
         return DataLoader(self.dataset_train_iter, batch_size=self.batch_size, num_workers=4)

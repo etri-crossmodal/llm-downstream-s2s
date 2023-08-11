@@ -247,21 +247,32 @@ if __name__ == '__main__':
     def _decode_a_batch(grp):
         return tknizer.batch_decode(grp, skip_special_tokens=True,)
 
+    def _decode_a_batch_with_specialtokens(grp):
+        decoded = tknizer.batch_decode(grp, skip_special_tokens=False,)
+        for idx, text in enumerate(decoded):
+            decoded[idx] = decoded[idx].replace("</s>", "").replace("<pad>", "")
+        return decoded
+
     # use half of available cores.
     effective_cpu_cnts = len(os.sched_getaffinity(0))//2
+
+    decode_func = _decode_a_batch
 
     # to remove useless detokenization process
     if args.task == 'klue-mrc' or args.task == 'korquad-v1':
         test_helper.INFER_LABELS = None
+    elif args.task == 'klue-nli':
+        # special token을 이용하기 때문에 살려야 함.
+        decode_func = _decode_a_batch_with_specialtokens
 
     # detokenize predicts and gold labels
     with mp.Pool(processes=effective_cpu_cnts) as pool:
         print(f"Detokenize Predicted Output and labels, with {effective_cpu_cnts} processes.")
         if test_helper.INFER_PREDICTIONS is not None:
-            detokenized_preds = pool.map(_decode_a_batch, test_helper.INFER_PREDICTIONS)
+            detokenized_preds = pool.map(decode_func, test_helper.INFER_PREDICTIONS)
             test_helper.INFER_PREDICTIONS = [item for sublist in detokenized_preds for item in sublist]
         if test_helper.INFER_LABELS is not None:
-            detokenized_lbls = pool.map(_decode_a_batch, test_helper.INFER_LABELS)
+            detokenized_lbls = pool.map(decode_func, test_helper.INFER_LABELS)
             test_helper.INFER_LABELS = [item for sublist in detokenized_lbls for item in sublist]
 
     if args.task == 'klue-mrc':
