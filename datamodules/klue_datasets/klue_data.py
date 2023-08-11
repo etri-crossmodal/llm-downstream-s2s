@@ -174,6 +174,14 @@ class KLUE(datasets.GeneratorBasedBuilder):
             url="https://klue-benchmark.com/",
         ),
         KlueConfig(
+            name="dp_hfstyle",
+            description=_KLUE_DP_DESCRIPTION,
+            features=["sentence", "index", "word_form", "lemma", "pos", "head", "deprel"],
+            data_name="klue-dp-v1.1",
+            citation=_KLUE_CITATION,
+            url="https://klue-benchmark.com/",
+        ),
+        KlueConfig(
             name="wos",
             description=_KLUE_WOS_DESCRIPTION,
             features=["domain", "dialogue", "prev_state", "label_state", "slot_names", "sys_text"],
@@ -233,6 +241,17 @@ class KLUE(datasets.GeneratorBasedBuilder):
             features["pos"] = datasets.features.Sequence(datasets.Value("string"))
             features["head"] = datasets.features.Sequence(datasets.Value("int32"))
             features["relation"] = datasets.features.Sequence(datasets.Value("string"))
+        elif self.config.name == "dp_hfstyle":
+            """ huggingface style dataset. """
+            features={
+                    "sentence": datasets.Value("string"),
+                    "index": [datasets.Value("int32")],
+                    "word_form": [datasets.Value("string")],
+                    "lemma": [datasets.Value("string")],
+                    "pos": [datasets.Value("string")],
+                    "head": [datasets.Value("int32")],
+                    "deprel": [datasets.Value("string")],
+            }
         elif self.config.name == "wos":
             features["domain"] = datasets.features.Sequence(datasets.Value("string"))
             features["dialogue"] = datasets.features.Sequence(
@@ -296,7 +315,7 @@ class KLUE(datasets.GeneratorBasedBuilder):
         with open(data_file, encoding="utf-8") as f:
             if self.config.name in ["re", "ynat", "nli", "sts", "mrc", "wos"]:
                 json_lines = json.load(f)
-            elif self.config.name in ["ner", "dp"]:
+            elif self.config.name in ["ner", "dp", "dp_hfstyle"]:
                 lines = f.readlines()
 
             if self.config.name in ["re", "ynat", "nli", "sts"]:
@@ -385,7 +404,7 @@ class KLUE(datasets.GeneratorBasedBuilder):
                         elif role == "user":
                             state = dialogue["state"]
                         d_history.append({"role": role, "text": text})
-            elif self.config.name in ["ner", "dp"]:
+            elif self.config.name in ["ner", "dp",]:
                 filtered_lines = list(filter(lambda x: not x.startswith("##"), lines))
 
                 size = len(filtered_lines)
@@ -427,6 +446,43 @@ class KLUE(datasets.GeneratorBasedBuilder):
                             "head": sent_info[4],
                             "relation": sent_info[5],
                         }
+            elif self.config.name == "dp_hfstyle":
+                """ copied from https://huggingface.co/datasets/klue/blob/main/klue.py """ 
+                reader = csv.reader(lines, delimiter="\t", quoting=csv.QUOTE_NONE)
+                for _ in range(5):  # skip headers
+                    next(reader)
+                id_ = -1
+                for row in reader:
+                    if row:
+                        if row[0].startswith("##"):
+                            id_ += 1
+                            index = []
+                            word_form = []
+                            lemma = []
+                            pos = []
+                            head = []
+                            deprel = []
+                            sentence = row[1]
+                        else:
+                            index.append(row[0])
+                            word_form.append(row[1])
+                            lemma.append(row[2])
+                            pos.append(row[3])
+                            head.append(row[4])
+                            deprel.append(row[5])
+                    else:  # new line
+                        assert len(index) == len(word_form) == len(lemma) == len(pos) == len(head) == len(deprel)
+                        yield id_, {
+                            "sentence": sentence,
+                            "index": index,
+                            "word_form": word_form,
+                            "lemma": lemma,
+                            "pos": pos,
+                            "head": head,
+                            "deprel": deprel,
+                        }
+                break
+
 
 def _get_label_classes(name, data_name, label_file):
     label_path = os.path.join(data_name, label_file)
