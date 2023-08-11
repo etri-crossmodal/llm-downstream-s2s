@@ -5,6 +5,7 @@
 import os
 import logging
 
+from copy import deepcopy
 from typing import Any, List, Union, Optional
 
 import pytorch_lightning as pl
@@ -251,6 +252,78 @@ class KLUENERDataModule(pl.LightningDataModule):
 
         # use validation dataset split as a test
         self.dataset_test_iter = klue_ner_whole["test"]
+
+    def train_dataloader(self):
+        return DataLoader(self.dataset_train_iter, batch_size=self.batch_size, num_workers=4)
+
+    def val_dataloader(self):
+        return DataLoader(self.dataset_valid_iter, batch_size=self.batch_size, num_workers=4)
+
+    def test_dataloader(self):
+        return DataLoader(self.dataset_test_iter, batch_size=self.batch_size, num_workers=4)
+
+    def predict_dataloader(self):
+        # same as test_dataloader()
+        return DataLoader(self.dataset_test_iter, batch_size=self.batch_size, num_workers=4)
+
+    # dataset을 바로 노출하는 메서드
+    def test_rawdataset(self):
+        return self.dataset_test_iter
+
+    def predict_rawdataset(self):
+        return self.dataset_test_iter
+
+
+
+class KLUEDPDataModule(pl.LightningDataModule):
+    def __init__(self, valid_proportion: float=0.01,
+                 batch_size: int=32,
+                 **kwargs):
+        super().__init__()
+        self.valid_proportion = valid_proportion
+        self.batch_size = batch_size
+        return
+
+    def prepare_data(self):
+        return
+
+    def setup(self, stage: str=""):
+        basepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "klue_datasets/")
+        klue_dp_whole = load_dataset(
+            path=os.path.join(basepath, "klue_data.py"),
+            name="dp_hfstyle", data_dir=basepath)
+
+        def _gen_dp_pred_string(example):
+            lip_str = '▁'.join([f"([{l}], {i}, {p})" 
+                for l, i, p in zip(example['lemma'], example['index'], example['pos'])])
+            lhdr_str = '▁'.join([f"([{l}], {h}, {d})" 
+                for l, h, d in zip(example['lemma'], example['head'], example['deprel'])])
+            return { 'label': f"lemma: {lip_str}\ndeprel: {lhdr_str}" }
+
+        # split train into train/valid
+        #splitted_ds = klue_dp_whole["train"].train_test_split(test_size=self.valid_proportion,)
+        #self.dataset_train_iter = splitted_ds["train"]
+        #self.dataset_valid_iter = splitted_ds["test"]
+
+        # 임시..
+        self.dataset_train_iter = klue_dp_whole["train"]
+        self.dataset_valid_iter = deepcopy(klue_dp_whole["test"])
+
+        # use validation dataset split as a test
+        self.dataset_test_iter = klue_dp_whole["test"]
+
+        # 전처리
+        self.dataset_train_iter = self.dataset_train_iter.map(_gen_dp_pred_string)
+        self.dataset_valid_iter = self.dataset_valid_iter.map(_gen_dp_pred_string)
+        self.dataset_test_iter = self.dataset_test_iter.map(_gen_dp_pred_string)
+
+        # 컬럼 정렬을 위해 입/출력만 남김
+        self.dataset_train_iter = self.dataset_train_iter.remove_columns(['index', 'word_form', 'lemma',
+                                                                          'pos', 'head', 'deprel'])
+        self.dataset_valid_iter = self.dataset_valid_iter.remove_columns(['index', 'word_form', 'lemma',
+                                                                          'pos', 'head', 'deprel'])
+        self.dataset_test_iter = self.dataset_test_iter.remove_columns(['index', 'word_form', 'lemma',
+                                                                        'pos', 'head', 'deprel'])
 
     def train_dataloader(self):
         return DataLoader(self.dataset_train_iter, batch_size=self.batch_size, num_workers=4)

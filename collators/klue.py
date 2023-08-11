@@ -188,3 +188,38 @@ class KLUENERDataCollator:
             raise NotImplementedError
 
         return None
+
+
+@dataclass
+class KLUEDPDataCollator:
+    """
+        KLUE-DP data collator.
+    """
+    # dataclass definitions
+    tokenizer: Optional[Callable]=field(
+        default_factory=lambda: AutoTokenizer.from_pretrained("google/byt5-small", return_tensors="pt"))
+    label_map: Union[Dict[Any, str], Callable[Any,Any]]=None
+    max_seq_length: Optional[int]=None
+
+    def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
+        if isinstance(examples, dict):
+            sentences = examples['sentence']
+            labels = examples['label']
+
+            input_texts = []
+            label_texts = []
+            for idx, sentence in enumerate(sentences):
+                input_texts.append(f"task: Dependency Parsing\n\nInput: {sentence}\n")
+                label_texts.append(labels[idx])
+
+            assert len(input_texts) == len(label_texts)
+
+            return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
+                                                padding='longest', truncation="only_first",
+                                                max_length=self.max_seq_length,
+                                                return_tensors="pt", return_attention_mask=True,)
+                                 )
+        else:
+            raise NotImplementedError
+
+        return None

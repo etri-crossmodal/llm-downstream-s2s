@@ -16,6 +16,7 @@
 # Lint as: python3
 """The KLUE benchmark"""
 
+import csv
 import json
 import os
 import re
@@ -295,7 +296,7 @@ class KLUE(datasets.GeneratorBasedBuilder):
                     },
                 ),
             ]
-        elif self.config.name in ["ner", "dp"]:
+        elif self.config.name in ["ner", "dp", "dp_hfstyle"]:
             return [
                 datasets.SplitGenerator(
                     name=datasets.Split.TRAIN,
@@ -486,7 +487,6 @@ class KLUE(datasets.GeneratorBasedBuilder):
                             "head": head,
                             "deprel": deprel,
                         }
-                break
 
 
 def _get_label_classes(name, data_name, label_file):
