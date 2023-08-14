@@ -298,7 +298,10 @@ class KLUEDPDataModule(pl.LightningDataModule):
                 for l, i, p in zip(example['lemma'], example['index'], example['pos'])])
             lhdr_str = '▁'.join([f"([{l}], {h}, {d})" 
                 for l, h, d in zip(example['lemma'], example['head'], example['deprel'])])
-            return { 'label': f"lemma: {lip_str}\ndeprel: {lhdr_str}" }
+            #return { 'label': f"lemma: {lip_str}\ndeprel: {lhdr_str}" }
+
+            return { 'ma_out': lip_str,
+                     'label': f"deprel: {lhdr_str}" }
 
         # split train into train/valid
         #splitted_ds = klue_dp_whole["train"].train_test_split(test_size=self.valid_proportion,)

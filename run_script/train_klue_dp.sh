@@ -2,7 +2,7 @@
 # 그렇지 않은 것은 <어휘:클래스> <어휘:클래스> ... 로 만 예측함
 # collators/klue.py:177~178 을 참고, label texts에 뭐가 들어가는지, only_tags vs sentence로 이해하면 됨 
 python train.py -task klue-dp \
-  -save_path ./DELETEME_finetune_klue_dp_230811 \
+  -save_path ./DELETEME_finetune_klue_dp_230811_input_lemma \
   -init_model etri-lirs/gbst-kebyt5-base-preview \
   -strategy deepspeed_1 -float_precision 16 -max_epoch 4 -gpus 4 \
   -gradient_checkpointing 0 \

@@ -204,12 +204,13 @@ class KLUEDPDataCollator:
     def __call__(self, examples: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(examples, dict):
             sentences = examples['sentence']
+            ma_outs = examples['ma_out']
             labels = examples['label']
 
             input_texts = []
             label_texts = []
             for idx, sentence in enumerate(sentences):
-                input_texts.append(f"task: Dependency Parsing\n\nInput: {sentence}\n")
+                input_texts.append(f"task: Dependency Parsing\n\nInput: {sentence}\nLemmas: {ma_outs[idx]}")
                 label_texts.append(labels[idx])
 
             assert len(input_texts) == len(label_texts)
