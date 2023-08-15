@@ -261,7 +261,7 @@ if __name__ == '__main__':
     # to remove useless detokenization process
     if args.task == 'klue-mrc' or args.task == 'korquad-v1':
         test_helper.INFER_LABELS = None
-    elif args.task == 'klue-nli':
+    elif args.task in ['klue-nli', 'klue-dp'] :
         # special token을 이용하기 때문에 살려야 함.
         decode_func = _decode_a_batch_with_specialtokens
 

@@ -24,8 +24,21 @@ import numpy as np
 
 from sklearn.metrics import f1_score
 
-GOLD_FILENAME = "./klue_dp_gold_out-with-input_lemma.txt"
-PRED_FILENAME = "./klue_dp_pred_out_gbst-base-with-input_lemma-230814.txt"
+# v2
+#GOLD_FILENAME = "./klue_dp_gold_out-with-input_lemma.txt"
+#PRED_FILENAME = "./klue_dp_pred_out_gbst-base-with-input_lemma-230814.txt"
+
+# v3
+#GOLD_FILENAME = "./klue_dp_gold_out-v3.txt"
+#PRED_FILENAME = "./klue_dp_pred_out_gbst-base-v3-230815.txt"
+
+# v3a
+#GOLD_FILENAME = "./klue_dp_gold_out-v3a.txt"
+#PRED_FILENAME = "./klue_dp_pred_out_gbst-base-v3a-230815.txt"
+
+# v3b
+GOLD_FILENAME = "./klue_dp_gold_out-v3b.txt"
+PRED_FILENAME = "./klue_dp_pred_out_gbst-base-v3b-230815.txt"
 
 # 구조분석 레이블. KLUE-baseline 코드에서 가져옴.  
 # https://github.com/KLUE-benchmark/KLUE-baseline/blob/8a03c9447e4c225e806877a84242aea11258c790/klue_baseline/data/klue_dp.py#L490
@@ -53,7 +66,7 @@ def read_predicts(filename):
             if aline[:5] == "lemma":
                 # lemma line
                 lemmas.append(aline.strip()[6:])
-            else:
+            elif aline[:5] == 'depre':
                 # dep line
                 aline = aline[8:] 
                 #print(aline)
@@ -63,10 +76,10 @@ def read_predicts(filename):
                 for dep in deps:
                     mat = re.match("\((.+?), ([0-9]+), ([A-Z_]+)\)", dep)
                     if mat is None:
-                        #print(f"cannot parsable. skip this prediction. {dep}")
+                        print(f"cannot parsable. skip this prediction. {dep}")
                         parse_failure += 1
                     #    continue
-                    #assert len(mat.groups()) == 3, f"matched groups not 3. parse failure. {dep}"
+                    assert mat is None or len(mat.groups()) == 3, f"matched groups not 3. parse failure. {dep}"
                     heads_list.append(-2 if mat is None else int(mat.groups()[1]))
                     if mat is not None:
                         lbl = mat.groups()[2]
@@ -83,6 +96,9 @@ def read_predicts(filename):
                     deps_list.append(lbl_value)
                 dep_heads.append(heads_list)
                 dep_deprels.append(deps_list)
+            else:
+                # for v3a --> word_counts: int(x)\n
+                continue
 
     #print(f"{lines}")
 
@@ -100,6 +116,9 @@ if __name__ == '__main__':
     assert len(gold_heads) == len(pred_heads), f"gold heads: {len(gold_heads)}, pred_heads: {len(pred_heads)}"
 
     aligned_pred_heads, aligned_pred_deprels = [], []
+    
+    shorter_pred_head, longer_pred_head = 0, 0
+    shorter_pred_deprel, longer_pred_deprel = 0, 0
 
     # 개수를 맞춰준다. 헤드가 없으면 -2을 채우고
     for idx, gold_head in enumerate(gold_heads):
@@ -110,13 +129,19 @@ if __name__ == '__main__':
         # 짧으면 채우고 길면 잘라낸다.
         if len(gold_head) > len(pred_head):
             pred_head += [-2] * (len(gold_head)-len(pred_head))
+            shorter_pred_head += 1
         elif len(gold_head) < len(pred_head):
             pred_head = pred_head[:len(gold_head)]
+            longer_pred_head += 1
 
         if len(gold_deprel) > len(pred_deprel):
+            print(f'shorter case, gold({idx}): {gold_deprel}')
+            print(f'shorter case, pred: {pred_deprel}')
             pred_deprel += [-2] * (len(gold_deprel)-len(pred_deprel))
+            shorter_pred_deprel += 1
         elif len(gold_deprel) < len(pred_deprel):
             pred_deprel = pred_deprel[:len(gold_deprel)]
+            longer_pred_deprel += 1
 
         assert len(pred_head) == len(gold_head)
         assert len(pred_deprel) == len(gold_deprel)
@@ -128,6 +153,9 @@ if __name__ == '__main__':
 
         aligned_pred_heads.append(pred_head)
         aligned_pred_deprels.append(pred_deprel)
+
+    print(f"shorter pred head: {shorter_pred_head}, longer pred head: {longer_pred_head}")
+    print(f"shorter pred deprel: {shorter_pred_deprel}, longer pred deprel: {longer_pred_deprel}")
 
     # 이제 flatten
     gold_head_flatten = [item for sublist in gold_heads for item in sublist]

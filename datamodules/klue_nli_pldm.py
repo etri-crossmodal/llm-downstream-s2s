@@ -294,14 +294,41 @@ class KLUEDPDataModule(pl.LightningDataModule):
             name="dp_hfstyle", data_dir=basepath)
 
         def _gen_dp_pred_string(example):
+            wip_str = ''
+            for w, l, i, p in zip(example['word_form'], example['lemma'], example['index'], example['pos']):
+                ls = l.split(' ')
+                ps = p.split('+')
+                # w/first-last feature
+                #wip_str += f"{i}/{w}/{l}/{p}/{ls[0]}:{ps[0]}" + '/' + ("NONE" if len(ps)==1 else f"{ls[-1]}:{ps[-1]}") + '\n'
+                # simplified
+                wip_str += f"{i}/{w}/{l}/{p}\n"
             lip_str = '▁'.join([f"([{l}], {i}, {p})" 
                 for l, i, p in zip(example['lemma'], example['index'], example['pos'])])
             lhdr_str = '▁'.join([f"([{l}], {h}, {d})" 
                 for l, h, d in zip(example['lemma'], example['head'], example['deprel'])])
+            # splitter를 reserved token으로 적용 시
+            # v3, v3a
+            wdr_str = '▁'.join([f"({w}<extra_id_0>{i}, {h}, {d})" 
+                for w, i, h, d in zip(example['word_form'], example['index'], example['head'], example['deprel'])])
+            wdr_counts = len(example['word_form'])
+
+            # v3b
+            ihd_str = '▁'.join([f"({i}, {h}, {d})" 
+                for i, h, d in zip(example['index'], example['head'], example['deprel'])])
+            # ver 1
             #return { 'label': f"lemma: {lip_str}\ndeprel: {lhdr_str}" }
 
-            return { 'ma_out': lip_str,
-                     'label': f"deprel: {lhdr_str}" }
+            # ver 2
+            #return { 'ma_out': lip_str, 'label': f"deprel: {lhdr_str}" }
+
+            # ver 3
+            #return { 'ma_out': wip_str, 'label': f"deprel: {wdr_str}" }
+
+            # ver 3a
+            #return { 'ma_out': wip_str, 'label': f"word_counts:{wdr_counts}\ndeprel: {wdr_str}" }
+
+            # ver 3b: word_form을 중복하게하여 혼동하지 않도록, 그리고 word counts를 마지막에 출력하도록.
+            return { 'ma_out': wip_str, 'label': f"deprel: {ihd_str}\nword_counts: {wdr_counts}" }
 
         # split train into train/valid
         #splitted_ds = klue_dp_whole["train"].train_test_split(test_size=self.valid_proportion,)
