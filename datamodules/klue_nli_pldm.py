@@ -300,8 +300,10 @@ class KLUEDPDataModule(pl.LightningDataModule):
                 ps = p.split('+')
                 # w/first-last feature
                 #wip_str += f"{i}/{w}/{l}/{p}/{ls[0]}:{ps[0]}" + '/' + ("NONE" if len(ps)==1 else f"{ls[-1]}:{ps[-1]}") + '\n'
-                # simplified
-                wip_str += f"{i}/{w}/{l}/{p}\n"
+                # simplified, v3a, v3b
+                # wip_str += f"{i}/{w}/{l}/{p}\n"
+                # v3c
+                wip_str += f"{i}/{w}/{len(w)}/{l}/{p}\n"
             lip_str = '▁'.join([f"([{l}], {i}, {p})" 
                 for l, i, p in zip(example['lemma'], example['index'], example['pos'])])
             lhdr_str = '▁'.join([f"([{l}], {h}, {d})" 
@@ -315,6 +317,10 @@ class KLUEDPDataModule(pl.LightningDataModule):
             # v3b
             ihd_str = '▁'.join([f"({i}, {h}, {d})" 
                 for i, h, d in zip(example['index'], example['head'], example['deprel'])])
+            # v3c
+            ilhd_str = '▁'.join([f"({i}/{len(w)}, {h}, {d})" 
+                for i, w, h, d in zip(example['index'], example['word_form'], example['head'], example['deprel'])])
+
             # ver 1
             #return { 'label': f"lemma: {lip_str}\ndeprel: {lhdr_str}" }
 
@@ -328,7 +334,11 @@ class KLUEDPDataModule(pl.LightningDataModule):
             #return { 'ma_out': wip_str, 'label': f"word_counts:{wdr_counts}\ndeprel: {wdr_str}" }
 
             # ver 3b: word_form을 중복하게하여 혼동하지 않도록, 그리고 word counts를 마지막에 출력하도록.
-            return { 'ma_out': wip_str, 'label': f"deprel: {ihd_str}\nword_counts: {wdr_counts}" }
+            #return { 'ma_out': wip_str, 'label': f"deprel: {ihd_str}\nword_counts: {wdr_counts}" }
+
+            # ver 3c(new) 3b + ihd_str에서 index가 가리키는 word의 word_form char 길이가 얼마인지를 예측하게 함
+            return { 'ma_out': wip_str, 'label': f"deprel: {ilhd_str}\nword_counts: {wdr_counts}" }
+            
 
         # split train into train/valid
         #splitted_ds = klue_dp_whole["train"].train_test_split(test_size=self.valid_proportion,)

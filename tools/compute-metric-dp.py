@@ -37,8 +37,12 @@ from sklearn.metrics import f1_score
 #PRED_FILENAME = "./klue_dp_pred_out_gbst-base-v3a-230815.txt"
 
 # v3b
-GOLD_FILENAME = "./klue_dp_gold_out-v3b.txt"
-PRED_FILENAME = "./klue_dp_pred_out_gbst-base-v3b-230815.txt"
+#GOLD_FILENAME = "./klue_dp_gold_out-v3b.txt"
+#PRED_FILENAME = "./klue_dp_pred_out_gbst-base-v3b-230815.txt"
+
+# v3c
+GOLD_FILENAME = "./klue_dp_gold_out-v3c.txt"
+PRED_FILENAME = "./klue_dp_pred_out_gbst-base-v3c-230816.txt"
 
 # 구조분석 레이블. KLUE-baseline 코드에서 가져옴.  
 # https://github.com/KLUE-benchmark/KLUE-baseline/blob/8a03c9447e4c225e806877a84242aea11258c790/klue_baseline/data/klue_dp.py#L490
@@ -128,6 +132,8 @@ if __name__ == '__main__':
 
         # 짧으면 채우고 길면 잘라낸다.
         if len(gold_head) > len(pred_head):
+            print(f'shorter case, gold({idx}) head: {gold_head}')
+            print(f'shorter case, pred({idx}) head: {pred_head}')
             pred_head += [-2] * (len(gold_head)-len(pred_head))
             shorter_pred_head += 1
         elif len(gold_head) < len(pred_head):
@@ -135,11 +141,13 @@ if __name__ == '__main__':
             longer_pred_head += 1
 
         if len(gold_deprel) > len(pred_deprel):
-            print(f'shorter case, gold({idx}): {gold_deprel}')
-            print(f'shorter case, pred: {pred_deprel}')
+            print(f'shorter case, gold({idx}) deprel: {gold_deprel}')
+            print(f'shorter case, pred({idx}) deprel: {pred_deprel}')
             pred_deprel += [-2] * (len(gold_deprel)-len(pred_deprel))
             shorter_pred_deprel += 1
         elif len(gold_deprel) < len(pred_deprel):
+            print(f'longer case, gold({idx}) deprel: {gold_deprel}')
+            print(f'longer case, pred({idx}) deprel: {pred_deprel}')
             pred_deprel = pred_deprel[:len(gold_deprel)]
             longer_pred_deprel += 1
 
