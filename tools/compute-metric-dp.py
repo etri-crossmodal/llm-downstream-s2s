@@ -42,7 +42,7 @@ from sklearn.metrics import f1_score
 
 # v3c
 GOLD_FILENAME = "./klue_dp_gold_out-v3c.txt"
-PRED_FILENAME = "./klue_dp_pred_out_gbst-base-v3c-230816.txt"
+PRED_FILENAME = "./klue_dp_pred_out_gbst-base-v3d-230817-ep4.txt"
 
 # 구조분석 레이블. KLUE-baseline 코드에서 가져옴.  
 # https://github.com/KLUE-benchmark/KLUE-baseline/blob/8a03c9447e4c225e806877a84242aea11258c790/klue_baseline/data/klue_dp.py#L490

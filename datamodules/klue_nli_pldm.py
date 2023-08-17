@@ -303,20 +303,24 @@ class KLUEDPDataModule(pl.LightningDataModule):
                 # simplified, v3a, v3b
                 # wip_str += f"{i}/{w}/{l}/{p}\n"
                 # v3c
-                wip_str += f"{i}/{w}/{len(w)}/{l}/{p}\n"
-            lip_str = '▁'.join([f"([{l}], {i}, {p})" 
-                for l, i, p in zip(example['lemma'], example['index'], example['pos'])])
-            lhdr_str = '▁'.join([f"([{l}], {h}, {d})" 
-                for l, h, d in zip(example['lemma'], example['head'], example['deprel'])])
+                #wip_str += f"{i}/{w}/{len(w)}/{l}/{p}\n"
+
+                # v4d, append start-end lemma and pos
+                wip_str += f"{i}/{w}/{len(w)}/{l}/{p}/{ls[0]}:{ps[0]}" + '/' + ("NONE" if len(ps)==1 else f"{ls[-1]}:{ps[-1]}") + '\n'
+
+            #lip_str = '▁'.join([f"([{l}], {i}, {p})" 
+            #    for l, i, p in zip(example['lemma'], example['index'], example['pos'])])
+            #lhdr_str = '▁'.join([f"([{l}], {h}, {d})" 
+            #    for l, h, d in zip(example['lemma'], example['head'], example['deprel'])])
             # splitter를 reserved token으로 적용 시
             # v3, v3a
-            wdr_str = '▁'.join([f"({w}<extra_id_0>{i}, {h}, {d})" 
-                for w, i, h, d in zip(example['word_form'], example['index'], example['head'], example['deprel'])])
+            #wdr_str = '▁'.join([f"({w}<extra_id_0>{i}, {h}, {d})" 
+            #    for w, i, h, d in zip(example['word_form'], example['index'], example['head'], example['deprel'])])
             wdr_counts = len(example['word_form'])
 
             # v3b
-            ihd_str = '▁'.join([f"({i}, {h}, {d})" 
-                for i, h, d in zip(example['index'], example['head'], example['deprel'])])
+            #ihd_str = '▁'.join([f"({i}, {h}, {d})" 
+            #    for i, h, d in zip(example['index'], example['head'], example['deprel'])])
             # v3c
             ilhd_str = '▁'.join([f"({i}/{len(w)}, {h}, {d})" 
                 for i, w, h, d in zip(example['index'], example['word_form'], example['head'], example['deprel'])])
@@ -338,6 +342,8 @@ class KLUEDPDataModule(pl.LightningDataModule):
 
             # ver 3c(new) 3b + ihd_str에서 index가 가리키는 word의 word_form char 길이가 얼마인지를 예측하게 함
             return { 'ma_out': wip_str, 'label': f"deprel: {ilhd_str}\nword_counts: {wdr_counts}" }
+
+            # v3d에서는 적용하지 않지만, 예측에서 first or last pos를 예측하게 하는게 더 좋지 않을까 생각 중.
             
 
         # split train into train/valid
