@@ -141,9 +141,11 @@ class KLUEMRCDataModule(pl.LightningDataModule):
         # max_seq_length가 5200이 넘어가면 별도의 sliding이 필요없다는 뜻.
 
         # split train into train/valid
-        splitted_ds = klue_mrc_whole["train"].train_test_split(test_size=self.valid_proportion,)
-        self.dataset_train_iter = splitted_ds["train"]
-        self.dataset_valid_iter = splitted_ds["test"]
+        #splitted_ds = klue_mrc_whole["train"].train_test_split(test_size=self.valid_proportion,)
+        #self.dataset_train_iter = splitted_ds["train"]
+        #self.dataset_valid_iter = splitted_ds["test"]
+        self.dataset_train_iter = klue_mrc_whole["train"]
+        self.dataset_valid_iter = klue_mrc_whole["test"]
 
         # use validation dataset split as a test
         #self.dataset_test_iter = klue_mrc_whole["test"].shard(num_shards=100, index=99)
@@ -168,6 +170,11 @@ class KLUEMRCDataModule(pl.LightningDataModule):
         # 심플하게, 정답이 있는 쪽을 1.5배로 oversampling 하도록 한다.
         have_anss = self.dataset_train_iter.filter(lambda example: example['plausible_answer'] is False)
         behalf_train = have_anss.shuffle(seed=99).shard(num_shards=2, index=0)
+        self.dataset_train_iter = concatenate_datasets([self.dataset_train_iter, behalf_train])
+
+        # 반대로 정답이 없는것을 더 많이 나타내게 한다. collator에서 보정할 기회를 줄 것이다.
+        no_anss = self.dataset_train_iter.filter(lambda example: example['plausible_answer'] is True)
+        behalf_train = no_anss.shuffle(seed=99).shard(num_shards=2, index=0)
         self.dataset_train_iter = concatenate_datasets([self.dataset_train_iter, behalf_train])
 
         """
@@ -305,7 +312,7 @@ class KLUEDPDataModule(pl.LightningDataModule):
                 # v3c
                 #wip_str += f"{i}/{w}/{len(w)}/{l}/{p}\n"
 
-                # v4d, append start-end lemma and pos
+                # v3d, append start-end lemma and pos
                 wip_str += f"{i}/{w}/{len(w)}/{l}/{p}/{ls[0]}:{ps[0]}" + '/' + ("NONE" if len(ps)==1 else f"{ls[-1]}:{ps[-1]}") + '\n'
 
             #lip_str = '▁'.join([f"([{l}], {i}, {p})" 
@@ -321,9 +328,14 @@ class KLUEDPDataModule(pl.LightningDataModule):
             # v3b
             #ihd_str = '▁'.join([f"({i}, {h}, {d})" 
             #    for i, h, d in zip(example['index'], example['head'], example['deprel'])])
-            # v3c
+            # v3c, v3d
             ilhd_str = '▁'.join([f"({i}/{len(w)}, {h}, {d})" 
                 for i, w, h, d in zip(example['index'], example['word_form'], example['head'], example['deprel'])])
+
+            # v3e -> v3d에 비해 성능이 낮음
+            #ilphd_str = '▁'.join([f"({i}/{len(w)}, {h}, {p.split('+')[0][:2]}, {d})" 
+            #    for i, w, p, h, d in zip(example['index'], example['word_form'], example['pos'],
+            #                             example['head'], example['deprel'])])
 
             # ver 1
             #return { 'label': f"lemma: {lip_str}\ndeprel: {lhdr_str}" }
@@ -341,9 +353,12 @@ class KLUEDPDataModule(pl.LightningDataModule):
             #return { 'ma_out': wip_str, 'label': f"deprel: {ihd_str}\nword_counts: {wdr_counts}" }
 
             # ver 3c(new) 3b + ihd_str에서 index가 가리키는 word의 word_form char 길이가 얼마인지를 예측하게 함
+            # v3d에서도 사용.
             return { 'ma_out': wip_str, 'label': f"deprel: {ilhd_str}\nword_counts: {wdr_counts}" }
 
             # v3d에서는 적용하지 않지만, 예측에서 first or last pos를 예측하게 하는게 더 좋지 않을까 생각 중.
+            # v3e 에서 먼저 p[0]를 예측. -> 실패. pos를 예측하는 것은, 2글자로 줄이는 것도 충분치 않고, 오류만 늘음
+            # return { 'ma_out': wip_str, 'label': f"deprel: {ilphd_str}\nword_counts: {wdr_counts}" }
             
 
         # split train into train/valid

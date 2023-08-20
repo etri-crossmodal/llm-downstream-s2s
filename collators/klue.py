@@ -4,6 +4,7 @@
     Copyright (C) 2023~, Jong-hun Shin. ETRI LIRS.
 """
 import re
+import random
 
 from dataclasses import dataclass, field
 from typing import Any, Callable, Union, Optional, Dict
@@ -129,17 +130,55 @@ class KLUEMRCDataCollator:
             input_texts = []
             label_texts = []
             for idx, title in enumerate(titles):
+                ctx = contexts[idx]
+                is_impos = is_impossibles[idx]
+                # 지문을 문장단위로 쪼개어 준다. loose하게 쪼개자. 복수개의 문장이 잡혀도 그게 나음.
+                ctx_lists = [f"{ix} // {x}" for ix, x in enumerate(
+                    [x.strip() for x in re.split("(.+?[가-힣]{3}[\.?!]+)( +|$)", ctx) if x != '' and len(x) > 1])]
+                #ctx_lists = [f"{ix} // {x}" for ix, x in enumerate(kss.split_sentences(ctx,))]
+                #ctx = '\n'.join(ctx_lists)
+
                 # 가장 간단한 접근 - 길이가 문제다. 학습 때는 이렇게 해서는 안됨.
-                input_texts.append(f"task: MRC\n\nquestion: {questions[idx]}\n\n"
-                                   f"context: {contexts[idx]}\n")
-                #                   f"title: {title}\n")
-                # set shortest label data
-            for idx, impos in enumerate(is_impossibles):
-                if impos:
-                    # plausible_answer == True ==> no correct answer.
-                    label_texts.append('[답 없음]')
+                input_texts.append(f"task: MRC, 지문을 읽고 질문에 답을 할 수 없다면 '[알 수 없음]'을 출력한다.\n"
+                                   f"질문: {questions[idx]}\n"
+                                   f"지문: {ctx}\n")
+                # 비슷한 질문을 찾아보고 답이 있나 없나를 보게 할 것인가?
+                # 아니면 그냥 관련있는 지문이 없다고 하고 끝 낼 것인가?
+                """
+                lbl_included_ctx_idx = []
+                if is_impos:
+                    label_base = "-1 // 정답 없음"
                 else:
-                    label_texts.append(labels['text'][idx])
+                    for ixx, ct in enumerate(ctx_lists):
+                        if ct.replace(' ', '').find(labels['text'][idx].replace(' ', '')) >= 0:
+                            lbl_included_ctx_idx.append(str(ixx))
+                    if len(lbl_included_ctx_idx) > 0:
+                        label_base = ','.join(lbl_included_ctx_idx) + f" // {labels['text'][idx]}"
+                    else:
+                        # 그 수가 많지 않으니 강제로 정답이 없다고 할 것.
+                        label_base = f"-1 // 정답 없음}"
+                        print("** WARNING: klue-mrc, label text not found in contexts, but not impossibles.")
+                        print(f"{ctx}")
+                        print(f"정답: {labels['text'][idx]}") 
+                """
+                if is_impos:
+                    # 정답이 나올 수 없으면 다음과 같이 한다:
+                    # (1) 오답 + 정답이 아님
+                    # (1) '알 수 없음' + 정답임
+                    if random.randrange(0, 100) > 20:
+                        label_base = "출력: [알 수 없음]\n정답임"
+                    else:
+                        # 이렇게 숙의를 하게 하는게 맞는건가? 아니면 정답을 냈을 때 아니라고 하고 덮어 쓰는게 맞는가?
+                        label_base = f"출력: {labels['text'][idx]}\n정답이 아님, 새 정답: [알 수 없음]" 
+                else:
+                    # 이 경우에도 가끔씩 '알 수 없음' + 정답이 아님 을 출력하게 해야 함. 20%를 하게 하자.
+                    if random.randrange(0, 100) < 20:
+                        #label_base = f"출력: [알 수 없음]\n정답이 아님" # 이러면 정답을 다시 내놓을 수 가 없게 된다.
+                        # 아래 주석을 풀고 추가 실험할 것.
+                        label_base = f"출력: [알 수 없음]\n정답이 아님, 새 정답: {labels['text'][idx]}"
+                    else:
+                        label_base = f"출력: {labels['text'][idx]}\n정답임"
+                label_texts.append(label_base)
 
             return BatchEncoding(self.tokenizer(text=input_texts, text_target=label_texts,
                                                 padding='longest', truncation="only_first",

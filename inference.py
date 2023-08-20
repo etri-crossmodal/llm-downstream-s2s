@@ -276,6 +276,27 @@ if __name__ == '__main__':
             test_helper.INFER_LABELS = [item for sublist in detokenized_lbls for item in sublist]
 
     if args.task == 'klue-mrc':
+        # 일단 한번 저장하자..
+        with open("./mrc-pred-test-before-postprocess.tmp.txt", "wt", encoding="utf-8") as off:
+            for pred_out in test_helper.INFER_PREDICTIONS:
+                off.write(f"{pred_out}\n")
+
+        # 예측 결과 후처리.
+        modified_pred = []
+        for pred_out in test_helper.INFER_PREDICTIONS:
+            pol = pred_out.split('\n')
+            a_pred = pol[0][4:]
+            try:
+                if pol[1][:3] != '정답임':           # as v2 (23.08.18.01)
+                    ridx = pol[1].rfind(", 새 정답: ") 
+                    a_pred = pol[1][ridx+8:]
+            except IndexError as e:
+                # 파싱 오류에는 알 수 없다고 해야 함.   
+                a_pred = "[알 수 없음]" 
+            modified_pred.append(a_pred)
+        test_helper.INFER_PREDICTIONS = modified_pred
+
+        # 정답 로드 부
         base_kluedata_dir = os.path.abspath(os.path.dirname(__file__))
         base_kluedata_dir += "/datamodules/klue_datasets/"
         mrcds = load_dataset(base_kluedata_dir + "/klue_data.py",
@@ -283,6 +304,7 @@ if __name__ == '__main__':
         # for testing purposes.
         #mrcds['test'] = mrcds['test'].shard(num_shards=100, index=99)
 
+        # KLUE-MRC는 collator를 거치지 않으므로, 예측을 이 포맷에 맞게 수정해주면 됨.
         test_helper.INFER_LABELS = []
         for idx, testdata in enumerate(mrcds['test']):
             newtd = {}
@@ -291,7 +313,7 @@ if __name__ == '__main__':
             ans = testdata['answers']
             if is_impossible:
                 #print("is impossible!")
-                ans = {'answer_start':[-1], 'text':['[답 없음]']}
+                ans = {'answer_start':[-1], 'text':['[알 수 없음]']}
             else:
                 # rename klue mrc answer start_idx to answer_start
                 ans = {'answer_start' if k == 'start_idx' else k:v for k, v in ans.items()}
