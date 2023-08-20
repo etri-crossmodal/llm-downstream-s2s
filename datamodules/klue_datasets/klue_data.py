@@ -134,6 +134,16 @@ class KLUE(datasets.GeneratorBasedBuilder):
             label_classes=["정치", "경제", "사회", "생활문화", "세계", "IT과학", "스포츠"],
         ),
         KlueConfig(
+            # EasyDataAugmentation Applied YNAT(KLUE-TC)
+            name="ynat-aeda",
+            description=_KLUE_YNAT_DESCRIPTION,
+            features=["title", "label"],
+            data_name="ynat-v1.1",
+            citation=_KLUE_CITATION,
+            url="https://klue-benchmark.com/",
+            label_classes=["정치", "경제", "사회", "생활문화", "세계", "IT과학", "스포츠"],
+        ),
+        KlueConfig(
             name="nli",
             description=_KLUE_NLI_DESCRIPTION,
             features=["premise", "hypothesis", "label"],
@@ -214,7 +224,7 @@ class KLUE(datasets.GeneratorBasedBuilder):
                 }
             )
             features["label"] = datasets.features.ClassLabel(names=_get_label_classes(self.config.name, self.config.data_name, "relation_list.json"))
-        elif self.config.name in ["ynat", "nli"]:
+        elif self.config.name in ["ynat", "nli", "ynat-aeda"]:
             features["label"] = datasets.features.ClassLabel(names=self.config.label_classes)
         elif self.config.name == "sts":
             features["labels"] = dict(
@@ -313,16 +323,27 @@ class KLUE(datasets.GeneratorBasedBuilder):
                     },
                 ),
             ]
+        elif self.config.name in ["ynat-aeda"]:
+            return [
+                datasets.SplitGenerator(
+                    name=datasets.Split.TRAIN,
+                    gen_kwargs={
+                        "data_file": os.path.join(dl_dir, "ynat-v1.1_train_aeda_0.7augmented.json"),
+                        "split": datasets.Split.TRAIN,
+                    },
+                ),
+            ]
+
 
     def _generate_examples(self, data_file, split):
         print(f"data_filepath: {data_file}")
         with open(data_file, encoding="utf-8") as f:
-            if self.config.name in ["re", "ynat", "nli", "sts", "mrc", "wos"]:
+            if self.config.name in ["re", "ynat", "nli", "sts", "mrc", "wos", "ynat-aeda"]:
                 json_lines = json.load(f)
             elif self.config.name in ["ner", "dp", "dp_hfstyle"]:
                 lines = f.readlines()
 
-            if self.config.name in ["re", "ynat", "nli", "sts"]:
+            if self.config.name in ["re", "ynat", "nli", "sts", "ynat-aeda"]:
                 for idx, json_line in enumerate(json_lines, start=0):
                     if self.config.name == "re":
                         yield idx, {
@@ -335,7 +356,7 @@ class KLUE(datasets.GeneratorBasedBuilder):
                                         "end": json_line["object_entity"]["end_idx"]},
                             "label":json_line["label"],
                         }
-                    elif self.config.name == "ynat":
+                    elif self.config.name in ["ynat", "ynat-aeda"]:
                         yield idx, {
                             "title":json_line["title"],
                             "label":json_line["label"],

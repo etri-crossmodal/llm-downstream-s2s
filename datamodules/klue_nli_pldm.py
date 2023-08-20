@@ -86,8 +86,15 @@ class KLUEYNATDataModule(pl.LightningDataModule):
             path=os.path.join(basepath, "klue_data.py"),
             name="ynat", data_dir=basepath)
 
+        klue_ynat_aeda = load_dataset(
+            path=os.path.join(basepath, "klue_data.py"),
+            name="ynat-aeda", data_dir=basepath)
+
+        merged_train = concatenate_datasets([klue_ynat_whole["train"], klue_ynat_aeda["train"]])
+
         # split train into train/valid
-        splitted_ds = klue_ynat_whole["train"].train_test_split(test_size=self.valid_proportion,)
+        #splitted_ds = klue_ynat_whole["train"].train_test_split(test_size=self.valid_proportion,)
+        splitted_ds = merged_train.train_test_split(test_size=self.valid_proportion,)
         self.dataset_train_iter = splitted_ds["train"]
         self.dataset_valid_iter = splitted_ds["test"]
 
