@@ -131,7 +131,7 @@ class KLUE(datasets.GeneratorBasedBuilder):
             data_name="ynat-v1.1",
             citation=_KLUE_CITATION,
             url="https://klue-benchmark.com/",
-            label_classes=["정치", "경제", "사회", "생활문화", "세계", "IT과학", "스포츠"],
+            label_classes=["IT과학", "경제", "사회", "생활문화", "세계", "스포츠", "정치"],
         ),
         KlueConfig(
             # EasyDataAugmentation Applied YNAT(KLUE-TC)
@@ -141,7 +141,7 @@ class KLUE(datasets.GeneratorBasedBuilder):
             data_name="ynat-v1.1",
             citation=_KLUE_CITATION,
             url="https://klue-benchmark.com/",
-            label_classes=["정치", "경제", "사회", "생활문화", "세계", "IT과학", "스포츠"],
+            label_classes=["IT과학", "경제", "사회", "생활문화", "세계", "스포츠", "정치"],
         ),
         KlueConfig(
             name="nli",

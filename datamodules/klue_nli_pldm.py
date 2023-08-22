@@ -86,15 +86,21 @@ class KLUEYNATDataModule(pl.LightningDataModule):
             path=os.path.join(basepath, "klue_data.py"),
             name="ynat", data_dir=basepath)
 
+        """
+        AEDA 데이터셋. 효과가 거의 없거나 마이너스.
         klue_ynat_aeda = load_dataset(
             path=os.path.join(basepath, "klue_data.py"),
             name="ynat-aeda", data_dir=basepath)
+        """
 
-        merged_train = concatenate_datasets([klue_ynat_whole["train"], klue_ynat_aeda["train"]])
+        # 1/4 추가함
+        #aeda_half = klue_ynat_aeda['train'].shuffle(seed=99).shard(num_shards=4, index=0)
+        #merged_train = concatenate_datasets([klue_ynat_whole["train"], klue_ynat_aeda['train']])
+        #merged_train = concatenate_datasets([klue_ynat_whole["train"], aeda_half])
 
         # split train into train/valid
-        #splitted_ds = klue_ynat_whole["train"].train_test_split(test_size=self.valid_proportion,)
-        splitted_ds = merged_train.train_test_split(test_size=self.valid_proportion,)
+        splitted_ds = klue_ynat_whole["train"].train_test_split(test_size=self.valid_proportion,)
+        #splitted_ds = merged_train.train_test_split(test_size=self.valid_proportion,)
         self.dataset_train_iter = splitted_ds["train"]
         self.dataset_valid_iter = splitted_ds["test"]
 

@@ -171,8 +171,25 @@ class KLUEMRCDataCollator:
                         # 이렇게 숙의를 하게 하는게 맞는건가? 아니면 정답을 냈을 때 아니라고 하고 덮어 쓰는게 맞는가?
                         label_base = f"출력: {labels['text'][idx]}\n정답이 아님, 새 정답: [알 수 없음]" 
                 else:
-                    # 이 경우에도 가끔씩 '알 수 없음' + 정답이 아님 을 출력하게 해야 함. 20%를 하게 하자.
-                    if random.randrange(0, 100) < 20:
+                    # 이 경우에도 가끔씩 '알 수 없음' + 정답이 아님 을 출력하게 해야 함. 3%를 하게 하자.
+                    # 숫자는 전체의 1/10에 적용
+                    choice_val = random.randrange(0, 100)
+                    if choice_val < 3 or \
+                            (re.search("[0-9]", labels['text'][idx]) is not None and random.randrange(0, 10) < 1):
+                        albl = labels['text'][idx]
+                        # add random noise - replace character with some constraints 
+                        # 일단 바꿀 위치를 결정하고 replace만 해 본다. delete/insertion도 해 봐야 하나?
+                        repl_pos = random.randrange(0, len(albl))
+                        if re.match("[0-9]", albl[repl_pos]) is not None:
+                            cand = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+                            del cand[int(re.match("[0-9]", albl[repl_pos]).group()[0])]
+                            albl = albl[:repl_pos] + str(random.choice(cand)) + albl[repl_pos+1:]
+                        else:
+                            albl = albl[:repl_pos] + chr(random.randrange(0xac00, 0xd7af)) + albl[repl_pos+1:]
+                        # [0-9]이면 다른 숫자로 결정
+                        # then add
+                        label_base = f"출력: {albl}\n정답이 아님, 새 정답: {labels['text'][idx]}"
+                    elif choice_val < 23:
                         #label_base = f"출력: [알 수 없음]\n정답이 아님" # 이러면 정답을 다시 내놓을 수 가 없게 된다.
                         # 아래 주석을 풀고 추가 실험할 것.
                         label_base = f"출력: [알 수 없음]\n정답이 아님, 새 정답: {labels['text'][idx]}"
