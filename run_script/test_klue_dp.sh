@@ -1,0 +1,1 @@
+python inference.py -task klue-dp -model DELETEME_finetune_klue_dp_230816_v3e/saved_checkpoints/last.ckpt/ -max_seq_length 6000 -max_predict_length 8192 -batch_size 4 -gpus 1 -save_output ./klue_dp_pred_out_gbst-base-v3e-230817.txt -save_label ./klue_dp_gold_out-v3e.txt
