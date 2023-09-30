@@ -226,6 +226,10 @@ class KLUENERDataCollator:
             input_texts = []
             label_texts = []
             for idx, sentence in enumerate(sentences):
+                # 반복구를 제거
+                sentence = re.sub("ㅋ+", "ㅋ", sentence)
+                sentence = re.sub(";+", ";", sentence)
+
                 notag_sent = re.sub("<(.+?):[A-Z][A-Z]>", "\\1", sentence)
                 only_tags = ' '.join(re.findall("<.+?:[A-Z][A-Z]>", sentence))
                 input_texts.append(f"task: NER\n\nInput: {notag_sent}\n")

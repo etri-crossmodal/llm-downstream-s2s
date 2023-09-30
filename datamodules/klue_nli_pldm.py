@@ -271,6 +271,7 @@ class KLUENERDataModule(pl.LightningDataModule):
         self.dataset_valid_iter = klue_ner_whole["test"]
 
         # use validation dataset split as a test
+        #self.dataset_test_iter = klue_ner_whole["test"].shard(num_shards=100, index=1)
         self.dataset_test_iter = klue_ner_whole["test"]
 
     def train_dataloader(self):
