@@ -15,8 +15,6 @@ from typing import Optional, Union, Tuple
 import torch
 
 from torch import nn
-from torch.utils.checkpoint import checkpoint
-
 from transformers import add_start_docstrings
 from transformers.modeling_outputs import (
     BaseModelOutput,
@@ -27,6 +25,7 @@ from transformers.modeling_outputs import (
 from transformers.models.t5.modeling_t5 import (
     T5LayerNorm, T5Block, T5Stack,
     T5Model, T5PreTrainedModel, T5ForConditionalGeneration, T5EncoderModel,
+    T5DenseActDense, T5DenseGatedActDense, T5Attention,
     T5_START_DOCSTRING
 )
 
@@ -34,10 +33,72 @@ from .configuration_gbst5 import GBSWT5Config
 from .gbst import GBSWT
 
 
-class GBSWT5Stack(T5Stack):
+class GBSWT5PreTrainedModel(T5PreTrainedModel):
+    config_class = GBSWT5Config
+    base_model_prefix = "GBSWT5"
+    is_parallelizable = True
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["T5Block"]
+    _keep_in_fp32_modules = ["wo"]
+
+    def _init_weights(self, module):
+        """Initialize the weights. 대부분은 T5PreTrainedModel을 따른다. """
+        factor = self.config.initializer_factor  # Used for testing weights initialization
+        if isinstance(module, T5LayerNorm):
+            module.weight.data.fill_(factor * 1.0)
+        elif isinstance(
+            module,
+            ( GBSWT5Model, GBSWT5ForConditionalGeneration, GBSWT5EncoderModel,),
+        ):
+            # Mesh TensorFlow embeddings initialization
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
+            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
+                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            if hasattr(module, "qa_outputs"):
+                module.qa_outputs.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+                module.qa_outputs.bias.data.zero_()
+        elif isinstance(module, T5DenseActDense):
+            # Mesh TensorFlow FF initialization
+            # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
+            # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
+            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi, "bias") and module.wi.bias is not None:
+                module.wi.bias.data.zero_()
+            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+            if hasattr(module.wo, "bias") and module.wo.bias is not None:
+                module.wo.bias.data.zero_()
+        elif isinstance(module, T5DenseGatedActDense):
+            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
+                module.wi_0.bias.data.zero_()
+            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
+                module.wi_1.bias.data.zero_()
+            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+            if hasattr(module.wo, "bias") and module.wo.bias is not None:
+                module.wo.bias.data.zero_()
+        elif isinstance(module, T5Attention):
+            # Mesh TensorFlow attention initialization to avoid scaling before softmax
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
+            d_model = self.config.d_model
+            key_value_proj_dim = self.config.d_kv
+            n_heads = self.config.num_heads
+            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            if module.has_relative_attention_bias:
+                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+        elif isinstance(module, GBSWT):
+            module._init_weights(factor)
+
+
+class GBSWT5Stack(GBSWT5PreTrainedModel):
     """ implement GBST-enabled T5Model, based on HF Transformers's T5Stack. """
     def __init__(self, config: GBSWT5Config, embed_tokens :nn.Embedding=None):
-        super(T5PreTrainedModel, self).__init__(config)
+        # 초기화는 이전의 것을 따른다. 상속이 좀 애매해서, 사실 별도로 정의해야 하나 싶기도 하다.
+        super().__init__(config)
 
         # override embed_tokens, apply GBWST
         self.embed_tokens = GBSWT(embed_tokens=embed_tokens,
@@ -61,21 +122,20 @@ class GBSWT5Stack(T5Stack):
         self.gradient_checkpointing = False
         self.downsample_factor = config.downsample_factor
 
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        inputs_embeds=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+    def forward(self,
+                input_ids=None,
+                attention_mask=None,
+                encoder_hidden_states=None,
+                encoder_attention_mask=None,
+                inputs_embeds=None,
+                head_mask=None,
+                cross_attn_head_mask=None,
+                past_key_values=None,
+                use_cache=None,
+                output_attentions=None,
+                output_hidden_states=None,
+                return_dict=None,
+                ):
         """ GBST 파트를 제외하면, T5Stack.forward() 구현을 그대로 복제하였다. """
         # Model parallel
         if self.model_parallel:
@@ -120,7 +180,6 @@ class GBSWT5Stack(T5Stack):
         if use_cache is True:
             assert self.is_decoder, f"`use_cache` can only be set to `True` if {self} is used as a decoder"
 
-        # FIXME: attention_mask가 주어지지 않았을 때, 마스크를 올바르게 생성하도록 고쳐야 함
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
         if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
@@ -283,9 +342,22 @@ class GBSWT5Stack(T5Stack):
             cross_attentions=all_cross_attentions,
         ), attention_mask
 
+    def get_input_embeddings(self):
+        return self.embed_tokens.embeds
 
-class GBSWT5Model(T5Model):
-    config_class = GBSWT5Config
+    def set_input_embeddings(self, new_embeddings):
+        self.embed_tokens.embeds = new_embeddings
+
+
+GBSWT5Stack.parallelize = T5Stack.parallelize
+GBSWT5Stack.deparallelize = T5Stack.deparallelize
+
+
+class GBSWT5Model(GBSWT5PreTrainedModel):
+    _keys_to_ignore_on_load_unexpected = [
+        "decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
+    ]
+    _tied_weights_keys = ["encoder.embed_tokens.embeds.weight", "decoder_embed_tokens.embeds.weight"]
 
     def __init__(self, config: GBSWT5Config):
         """ override T5Model """
@@ -299,11 +371,7 @@ class GBSWT5Model(T5Model):
         if not hasattr(config, 'score_consensus_attn'):
             config.score_consensus_attn = True
 
-        super(T5PreTrainedModel, self).__init__(config)
-
-        # override config class for AutoModel
-        self.config_class = GBSWT5Config
-        self.base_model_prefix = "GBSWT5"
+        super().__init__(config)
 
         # naive T5와 같이 embedding은 공유함
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
@@ -327,24 +395,23 @@ class GBSWT5Model(T5Model):
         self.model_parallel = False
         self.device_map = None
 
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        decoder_head_mask: Optional[torch.FloatTensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        decoder_inputs_embeds: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqModelOutput]:
+    def forward(self,
+                input_ids: Optional[torch.LongTensor] = None,
+                attention_mask: Optional[torch.FloatTensor] = None,
+                decoder_input_ids: Optional[torch.LongTensor] = None,
+                decoder_attention_mask: Optional[torch.BoolTensor] = None,
+                head_mask: Optional[torch.FloatTensor] = None,
+                decoder_head_mask: Optional[torch.FloatTensor] = None,
+                cross_attn_head_mask: Optional[torch.Tensor] = None,
+                encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+                past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+                inputs_embeds: Optional[torch.Tensor] = None,
+                decoder_inputs_embeds: Optional[torch.Tensor] = None,
+                use_cache: Optional[bool] = None,
+                output_attentions: Optional[bool] = None,
+                output_hidden_states: Optional[bool] = None,
+                return_dict: Optional[bool] = None,
+                ) -> Union[Tuple[torch.FloatTensor], Seq2SeqModelOutput]:
         """
         중요한 것은, downsampling이 된 경우 attention_mask가 변경되므로,
         이를 반영해주는 것이 필요하다. hf transformers 4.29.1에서 복제함
@@ -422,9 +489,22 @@ class GBSWT5Model(T5Model):
         )
 
 
+GBSWT5Model.parallelize = T5Model.parallelize
+GBSWT5Model.deparallelize = T5Model.deparallelize
+GBSWT5Model.get_input_embeddings = T5Model.get_input_embeddings
+GBSWT5Model.set_input_embeddings = T5Model.set_input_embeddings
+GBSWT5Model.get_encoder = T5Model.get_encoder
+GBSWT5Model._prune_heads = T5Model._prune_heads
+
+
 @add_start_docstrings("""T5 Model with a `language modeling` head on top.""", T5_START_DOCSTRING)
-class GBSWT5ForConditionalGeneration(T5ForConditionalGeneration):
-    config_class = GBSWT5Config
+class GBSWT5ForConditionalGeneration(GBSWT5PreTrainedModel):
+    _keys_to_ignore_on_load_unexpected = [
+        "decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
+    ]
+    _tied_weights_keys = ["encoder.embed_tokens.embeds.weight",
+                          "decoder_embed_tokens.embeds.weight",
+                          "lm_head.weight"]
 
     def __init__(self, config: GBSWT5Config):
         # override some default missing parameters for pretrained ByT5 models (e.g. google/byt5-small)
@@ -438,10 +518,7 @@ class GBSWT5ForConditionalGeneration(T5ForConditionalGeneration):
             config.score_consensus_attn = True
 
         # Grandparent의 init를 그대로 상속, 나머지는 T5ForConditionalGeneration을 따름
-        super(T5PreTrainedModel, self).__init__(config)
-        # override config class for AutoModel
-        self.config_class = GBSWT5Config
-        self.base_model_prefix = "GBSWT5"
+        super().__init__(config)
 
         self.model_dim = config.d_model
 
@@ -470,25 +547,24 @@ class GBSWT5ForConditionalGeneration(T5ForConditionalGeneration):
         self.model_parallel = False
         self.device_map = None
 
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        decoder_head_mask: Optional[torch.FloatTensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
+    def forward(self,
+                input_ids: Optional[torch.LongTensor] = None,
+                attention_mask: Optional[torch.FloatTensor] = None,
+                decoder_input_ids: Optional[torch.LongTensor] = None,
+                decoder_attention_mask: Optional[torch.BoolTensor] = None,
+                head_mask: Optional[torch.FloatTensor] = None,
+                decoder_head_mask: Optional[torch.FloatTensor] = None,
+                cross_attn_head_mask: Optional[torch.Tensor] = None,
+                encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+                past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+                inputs_embeds: Optional[torch.FloatTensor] = None,
+                decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+                labels: Optional[torch.LongTensor] = None,
+                use_cache: Optional[bool] = None,
+                output_attentions: Optional[bool] = None,
+                output_hidden_states: Optional[bool] = None,
+                return_dict: Optional[bool] = None,
+                ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         """
         중요한 것은 encoder outputs에서 수정된 attention_mask를 다시 반영해야 하는 것임
         downsampling이 들어간 경우, attention_mask가 변경되기 때문.
@@ -544,9 +620,6 @@ class GBSWT5ForConditionalGeneration(T5ForConditionalGeneration):
                 decoder_attention_mask = decoder_attention_mask.to(self.decoder.first_device)
 
         # Decode
-        # 만약 modeling_t5.py에서, scores += position_bias_masked 관련해서 tensor 크기 오류가 난다면
-        # attention_mask가 전달되지 않았을 수 있다. tokenizer가 attention_mask를 반환하도록 하고,
-        # forward()때 input_ids와 함께 attention_mask를 반드시 함께 전달해야 한다.
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
@@ -585,8 +658,6 @@ class GBSWT5ForConditionalGeneration(T5ForConditionalGeneration):
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # add z_loss for computational stability in bf16 amp.
             # see https://github.com/huggingface/transformers/pull/10956#issuecomment-820712267
-
-            # jhshin: disable z_loss for finetuning.
             if self.config.z_loss != 0.0:
                 log_z = lm_logits.view(-1).logsumexp(-1)
                 loss += self.config.z_loss * log_z.square()
@@ -608,12 +679,21 @@ class GBSWT5ForConditionalGeneration(T5ForConditionalGeneration):
         )
 
 
-@add_start_docstrings(
-    "The bare GBSWT5 Model transformer outputting encoder's raw hidden-states without any specific head on top.",
-    T5_START_DOCSTRING,
-)
-class GBSWT5EncoderModel(T5EncoderModel):
-    config_class = GBSWT5Config
+GBSWT5ForConditionalGeneration.parallelize = T5ForConditionalGeneration.parallelize
+GBSWT5ForConditionalGeneration.deparallelize = T5ForConditionalGeneration.deparallelize
+GBSWT5ForConditionalGeneration.get_input_embeddings = T5ForConditionalGeneration.get_input_embeddings
+GBSWT5ForConditionalGeneration.set_input_embeddings = T5ForConditionalGeneration.set_input_embeddings
+GBSWT5ForConditionalGeneration.get_output_embeddings = T5ForConditionalGeneration.get_output_embeddings
+GBSWT5ForConditionalGeneration.set_output_embeddings = T5ForConditionalGeneration.set_output_embeddings
+GBSWT5ForConditionalGeneration.get_encoder = T5ForConditionalGeneration.get_encoder
+GBSWT5ForConditionalGeneration.prepare_inputs_for_generation = T5ForConditionalGeneration.prepare_inputs_for_generation
+GBSWT5ForConditionalGeneration.prepare_decoder_input_ids_from_labels = T5ForConditionalGeneration.prepare_decoder_input_ids_from_labels
+GBSWT5ForConditionalGeneration._reorder_cache = T5ForConditionalGeneration._reorder_cache
+GBSWT5ForConditionalGeneration._prune_heads = T5Model._prune_heads
+
+
+class GBSWT5EncoderModel(T5PreTrainedModel):
+    _tied_weights_keys = ["encoder.embed_tokens.embeds.weight"]
 
     def __init__(self, config: GBSWT5Config):
         # override some default missing parameters for pretrained ByT5 models (e.g. google/byt5-small)
@@ -626,14 +706,9 @@ class GBSWT5EncoderModel(T5EncoderModel):
         if not hasattr(config, 'score_consensus_attn'):
             config.score_consensus_attn = True
 
-        # Grandparent의 init를 그대로 상속, 나머지는 T5ForConditionalGeneration을 따름
-        super(T5PreTrainedModel, self).__init__(config)
-        # override config class for AutoModel
-        self.config_class = GBSWT5Config
-        self.base_model_prefix = "GBSWT5"
+        super().__init__(config)
 
-        self.model_dim = config.d_model
-
+        # naive T5와 같이 embedding은 공유함
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_cfg = copy.deepcopy(config)
@@ -642,24 +717,23 @@ class GBSWT5EncoderModel(T5EncoderModel):
         encoder_cfg.is_encoder_decoder = False
         self.encoder = GBSWT5Stack(encoder_cfg, self.shared)
 
-        # Initialize weights and apply final processing
         self.post_init()
 
-        # Model parallel
         self.model_parallel = False
         self.device_map = None
 
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        return_resized_attention_mask: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
+    def forward(self,
+                input_ids: Optional[torch.LongTensor] = None,
+                attention_mask: Optional[torch.FloatTensor] = None,
+                head_mask: Optional[torch.FloatTensor] = None,
+                inputs_embeds: Optional[torch.FloatTensor] = None,
+                output_attentions: Optional[bool] = None,
+                output_hidden_states: Optional[bool] = None,
+                return_dict: Optional[bool] = None,
+                ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
+        r"""
+        downsampled 된 attention_mask를 함께 반환한다.
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_outputs, attention_mask = self.encoder(
@@ -672,7 +746,12 @@ class GBSWT5EncoderModel(T5EncoderModel):
             return_dict=return_dict,
         )
 
-        if return_resized_attention_mask:
-            return encoder_outputs, attention_mask
+        return encoder_outputs, attention_mask
 
-        return encoder_outputs
+
+GBSWT5EncoderModel.parallelize = T5EncoderModel.parallelize
+GBSWT5EncoderModel.deparallelize = T5EncoderModel.deparallelize
+GBSWT5EncoderModel.get_input_embeddings = T5EncoderModel.get_input_embeddings
+GBSWT5EncoderModel.set_input_embeddings = T5EncoderModel.set_input_embeddings
+GBSWT5EncoderModel.get_encoder = T5EncoderModel.get_encoder
+GBSWT5EncoderModel._prune_heads = T5EncoderModel._prune_heads

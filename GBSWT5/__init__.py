@@ -13,8 +13,9 @@ AutoModel.register(GBSWT5Config, GBSWT5Model)
 AutoModelForSeq2SeqLM.register(GBSWT5Config, GBSWT5ForConditionalGeneration)
 
 # T5EncoderForSequenceClassification 추가
-AutoModelForSequenceClassification.register(T5Config, T5EncoderForSequenceClassification)
-#AutoModelForSequenceClassification.register(T5Config, T5ForSequenceClassification)
+if Version(transformers.__version__) < Version("4.32.0"):
+    AutoModelForSequenceClassification.register(T5Config, T5EncoderForSequenceClassification)
+    #AutoModelForSequenceClassification.register(T5Config, T5ForSequenceClassification)
 
 
 def patch_sentence_transformers_models_Transformer():

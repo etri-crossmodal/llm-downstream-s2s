@@ -23,7 +23,8 @@ from einops import rearrange, repeat
 
 # Block definition
 _BLOCKS = (
-    (1, 0), (2, 0), (3, 0), (6, 0), (9, 0),
+    (1, 0), (2, 0), (3, 0),
+    (6, 0), (9, 0),
     #(12, 0), (12, 3), (12, 6), (12, 9)
 )
 
@@ -46,9 +47,9 @@ def masked_mean(in_tensor:Tensor, mask:Tensor, dim:int=-1):
     len_diff = len(in_tensor.shape) - len(mask.shape)
     #print(f"len_diff: {len_diff}, in_tensor.shape: {in_tensor.shape}, mask.shape: {mask.shape}")
     # shape will differ from 1?
-    #mask = mask[(..., *((None,) * len_diff))]
     mask = torch.unsqueeze(mask, dim=-len_diff)
     #print(f"new mask.shape: {mask.shape}")
+    # NOTICE: if tensor size mismatches, please check shape of a 'attention_mask' and 'input_ids'.
     in_tensor.masked_fill_(~(mask.bool()), 0.)
 
     total_elems = mask.sum(dim=dim)
@@ -66,6 +67,12 @@ class Depthwise1dConv(nn.Module):
     def forward(self, in_tensor):
         in_tensor = self.convol(in_tensor)
         return self.proj(in_tensor)
+
+    def _init_weights(self, factor:float=0.05):
+        print(f"1dConv-Weight initialize called, before: {self.convol.weight.data}")
+        self.convol.weight.data.normal_(mean=0.0, std=factor * 1.0)
+        self.proj.weight.data.normal_(mean=0.0, std=factor * 1.0)
+        print(f"1dConv-Weight initialize called, after: {self.convol.weight.data}")
 
 
 class Padding(nn.Module):
@@ -124,6 +131,12 @@ class GBSWT(nn.Module):
         self.cand_scoring = nn.Sequential(
             nn.Linear(dim, 1),
             Rearrange('... () -> ...'))
+
+    def _init_weights(self, factor:float=0.05):
+        self.positional_convol[2]._init_weights(factor)
+        print(f"GBSTW weight initialization called: before: {self.cand_scoring[0].weight.data}")
+        self.cand_scoring[0].weight.data.normal_(mean=0.0, std=factor * 1.0)
+        print(f"GBSTW weight initialization called: after: {self.cand_scoring[0].weight.data}")
 
     def get_blocks(self):
         """ return GBST candidate blocking list. """
@@ -209,11 +222,11 @@ class GBSWT(nn.Module):
         in_tensor = (block_reprs * scores).sum(dim=2)
 
         @torch.jit.script
-        def _reshape_input_tensor(in_tensor:Tensor, s:int, d:int) -> Tensor:
+        def _reshape_input_tensor(in_tensor:Tensor, s:int, d:int):
             # get divisible length to pad
             m = int(math.ceil(s / d) * d)
             #print(f"_reshape_input_tensor: {m}")
-            return torch.narrow(in_tensor, 1, 0, m) # equivalent of in_tensor[:, :m]
+            return in_tensor[:, :m]
 
         #print(f"current m: {m}")
         #in_tensor = in_tensor[:, :m]
