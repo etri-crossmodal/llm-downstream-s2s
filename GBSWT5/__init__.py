@@ -1,3 +1,6 @@
+from packaging.version import Version
+
+import transformers
 from transformers import (
     AutoConfig, AutoModel,
     AutoModelForSeq2SeqLM, AutoModelForSequenceClassification,
