@@ -24,6 +24,8 @@ from transformers import (T5ForConditionalGeneration,
 from transformers.optimization import (Adafactor, AdafactorSchedule)
 from deepspeed.ops.adam import FusedAdam, DeepSpeedCPUAdam
 from pytorch_lightning.utilities.deepspeed import convert_zero_checkpoint_to_fp32_state_dict
+from pytorch_lightning.utilities.rank_zero import rank_zero_only
+from pytorch_lightning.utilities import grad_norm
 from peft import (get_peft_config, get_peft_model,
                   LoraConfig, PrefixTuningConfig,
                   TaskType)
@@ -264,7 +266,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         # auto-wrapped model이 될 가능성을 위해, model을 다시 본다.
         model = self.trainer.model
         # CHECKME: no_decay target 이름이 맞는지 한번 더 확인할 것
-        no_decay = ["bias", "LayerNorm.weight"]
+        no_decay = ["bias", "layer_norm.weight"]
         #full_params = [p for n, p in model.named_parameters()]
         optim_group_params = [
             {
@@ -340,6 +342,11 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
 
         scheduler = {"scheduler": scheduler, "interval": "step", "frequency": 1}
         return [optimizer], [scheduler]
+
+    # pytorch-lightning 2에서는 def on_before_optimizer_step(self, optimizer)로 구성.
+    def on_before_optimizer_step(self, optimizer, optimizer_step):
+        norms = grad_norm(self.model, norm_type=2)
+        self.log_dict(norms)
 
     def training_step(self, batch, batch_idx):
         if self.data_collator is not None:

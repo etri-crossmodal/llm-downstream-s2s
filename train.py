@@ -127,6 +127,10 @@ def get_argparser():
                         help="Cosine Annealing Gamma hyperparameter.")
     parser.add_argument("-optim_cosanneal_restarts", type=int, default=4,
                         help="Cosine Annealing Restart number of times.")
+    parser.add_argument("-weight_decay", type=float, default=0.0,
+                        help="weight decay value. default: disable=0.0")
+    parser.add_argument("-grad_clip", type=float, default=1.0,
+                        help="gradient clipping value. set lower(0.1~0.5) when you meet NaNs during train.")
     return parser
 
 
@@ -308,6 +312,7 @@ if __name__ == '__main__':
         learning_rate=args.learning_rate, warmup_steps=args.warmup_steps,
         train_batch_size=args.batch_size, val_batch_size=args.batch_size,
         tuning_method=args.tuning_method,
+        weight_decay=args.weight_decay,
         gradient_checkpointing=grad_checkpointing,
         optim_cosanneal_gamma=args.optim_cosanneal_gamma,
         optim_cosanneal_restarts=args.optim_cosanneal_restarts,
@@ -385,6 +390,10 @@ if __name__ == '__main__':
     lr_mon = LearningRateMonitor(logging_interval=None)
     callbacks.append(lr_mon)
 
+    grad_clip_val=args.grad_clip       # gradient clipping 적용. adamW에서도 발생함을 확인..
+    if args.optim == 'adafactor':
+        grad_clip_val=None  # adafactor에서는 clipping을 제거해야 함.
+
     # initialize trainer,
     # fsdp_native를 사용해야 할 경우, configure_optimizer에서
     # torch.optim.AdamW()에 self.trainer.model.parameters()가 전달되어야 함.
@@ -404,7 +413,8 @@ if __name__ == '__main__':
             log_every_n_steps=1,
             accumulate_grad_batches=args.grad_acc,
             precision=precision_arg,
-            strategy=strat_instance
+            strategy=strat_instance,
+            gradient_clip_val=grad_clip_val,
             )
 
     # first validation for -save_every
