@@ -109,5 +109,5 @@ see requirements.txt
  * This software includes lucidrains/charformer-pytorch GitHub project for GBST implementation, which distributed under MIT License. Copyright (c) 2021 Phil Wang. all rights reserved. (Original Code URL: https://github.com/lucidrains/charformer-pytorch)
  * This software includes HuggingFace transformers's T5 implementation for GBST-enabled T5 model, which distributed under Apache 2.0 License. Copyright 2018- The Huggingface team. All rights reserved.
 
-     We are grateful for their excellent works.
+We are grateful for their excellent works.
 
