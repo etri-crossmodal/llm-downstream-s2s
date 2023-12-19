@@ -75,6 +75,7 @@ class CosineAnnealingWarmupRestarts(_LRScheduler):
         self.cur_cycle_steps = first_cycle_steps # first cycle step size
         self.cycle = 0 # cycle count
         self.step_in_cycle = last_epoch # step size of the current cycle
+        self.last_epoch = last_epoch
 
         super(CosineAnnealingWarmupRestarts, self).__init__(optimizer, last_epoch)
 
@@ -93,8 +94,8 @@ class CosineAnnealingWarmupRestarts(_LRScheduler):
         elif self.step_in_cycle < self.warmup_steps:
             return [(self.max_lr - base_lr)*self.step_in_cycle / self.warmup_steps + base_lr for base_lr in self.base_lrs]
         else:
-            return [base_lr + (self.max_lr - base_lr) \
-                    * (1 + math.cos(math.pi * (self.step_in_cycle-self.warmup_steps) \
+            return [base_lr + (self.max_lr - base_lr)
+                    * (1 + math.cos(math.pi * (self.step_in_cycle-self.warmup_steps)
                                     / (self.cur_cycle_steps - self.warmup_steps))) / 2
                     for base_lr in self.base_lrs]
 
@@ -266,7 +267,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         # auto-wrapped model이 될 가능성을 위해, model을 다시 본다.
         model = self.trainer.model
         # CHECKME: no_decay target 이름이 맞는지 한번 더 확인할 것
-        no_decay = ["bias", "layer_norm.weight"]
+        no_decay = ["bias", "layer_norm.weight", "shared.weight", "embed_tokens",]
         #full_params = [p for n, p in model.named_parameters()]
         optim_group_params = [
             {

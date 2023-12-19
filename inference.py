@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from collections import Counter
 from pathlib import Path
 from datetime import date
-from typing import Any
+from typing import Any, Dict
 
 import tqdm
 import numpy as np
@@ -195,7 +195,7 @@ if __name__ == '__main__':
             print("** DeepSpeed Stage 2/3 Checkpoint converting failed. maybe stage1?")
 
             # Monkey patching a LightningModule.on_load_checkpoint for deepspeed stage 1.
-            def on_load_checkpoint(wouldbe_self, checkpoint: dict[str, Any]) -> None:
+            def on_load_checkpoint(wouldbe_self, checkpoint: Dict[str, Any]) -> None:
                 if "state_dict" in checkpoint:
                     return
                 state_dict = checkpoint['module']
@@ -288,11 +288,11 @@ if __name__ == '__main__':
             a_pred = pol[0][4:]
             try:
                 if pol[1][:3] != '정답임':           # as v2 (23.08.18.01)
-                    ridx = pol[1].rfind(", 새 정답: ") 
+                    ridx = pol[1].rfind(", 새 정답: ")
                     a_pred = pol[1][ridx+8:]
             except IndexError as e:
-                # 파싱 오류에는 알 수 없다고 해야 함.   
-                a_pred = "[알 수 없음]" 
+                # 파싱 오류에는 알 수 없다고 해야 함.
+                a_pred = "[알 수 없음]"
             modified_pred.append(a_pred)
         test_helper.INFER_PREDICTIONS = modified_pred
 

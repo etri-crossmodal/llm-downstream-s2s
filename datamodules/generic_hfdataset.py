@@ -64,7 +64,7 @@ class GenericHFDataModule(pl.LightningDataModule):
         # do nothing.
         return
 
-    def _get_dataset_from_disk(self, dsets: Union[str, list[str]]):
+    def _get_dataset_from_disk(self, dsets: Union[str, List[str]]):
         if dsets is None:
             return None
 

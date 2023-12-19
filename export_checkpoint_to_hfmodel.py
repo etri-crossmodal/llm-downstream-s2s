@@ -10,7 +10,7 @@ import sys
 import os
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict
 
 import torch
 import GBSWT5
@@ -40,7 +40,7 @@ if __name__ == '__main__':
                 interm_checkpoint_filename = ""
 
                 # Monkey patching a LightningModule.on_load_checkpoint for deepspeed stage 1.
-                def on_load_checkpoint(wouldbe_self, checkpoint: dict[str, Any]) -> None:
+                def on_load_checkpoint(wouldbe_self, checkpoint: Dict[str, Any]) -> None:
                     if "state_dict" in checkpoint:
                         return
                     state_dict = checkpoint['module']
