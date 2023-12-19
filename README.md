@@ -1,122 +1,113 @@
-# Downstream task trainer/tester for huggingface pretrained s2s Language model
+# llm-downstream-s2s
+Trains downstream task (e.g. label prediction, translation, summary text generation, ...)  with encoder-decoder based Pre-trained Language Model
 
-label을 auto-regressive 하게 뽑아내는 downstream task 학습기.
+Supports following pretrained checkpoints, and also supports other encoder-decoder models (e.g. BART, T5):
+  * etri-lirs/kebyt5-small-preview
+  * etri-lirs/kebyt5-base-preview
+  * etri-lirs/kebyt5-large-preview
+  * etri-lirs/gbst-kebyt5-base-preview
+  * etri-lirs/gbst-kebyt5-large-preview (not public released yet, soon be available.)
 
-huggingface transformers 모델 중 s2s 사전학습 언어모델인 BART, T5, mT5, ByT5와 호환 됨
+Copyright (C), 2023- Electronics and Telecommunications Research Institute. All rights reserved.
 
-Copyright (C) 2023, Jong-hun Shin. ETRI LIRS.
 
-## 실행/개발 환경 구성 방법
+## How To Use
 
-### (optional, pip로 대체 가능) conda 실행환경 구성 및 pytorch 설치
-(1) conda 실행이 불가능할 경우, https://github.com/conda-forge/miniforge 에서 각 OS/플랫폼에 맞는 Miniforge3을 설치 후 터미널/셸을 재시작하여 활성화하고, 아래 명령어를 사용해 자신에게 맞는 python 실행 환경을 생성합니다:
-
-```
-$ conda create -n kebyt5-dev python=3.8
-$ conda activate kebyt5-dev 
-```
--n 옵션의 kebyt5-dev 라는 이름은 환경 명으로, 원하는대로 변경할 수 있습니다. activate 명령어를 통해서 해당 환경을 활성화할 수 있습니다.
-
-(2) llm-downstream-s2s 디렉터리로 이동, 다음 명령어를 수행하여 환경에 사용될 패키지를 설치합니다. 다음의 명령어를 사용해 패키지를 설치합니다:
-```
-$ conda env update -n kebyt5-dev --file conda-environment.yaml
-```
-
-conda를 사용하지 않는 경우, pip를 사용하여 pytorch 1.12 버전 이상을 설치합니다. pytorch.org의 설치 방법을 참고하십시오.
-
-### pip로 추가 의존성 해소
-
-다음 명령어를 사용하여 requirements.txt에 기재된 의존성을 해소합니다.
+### Create Environments with conda (optional, can be replaced with pip)
+Python environment preparation with conda. (see https://github.com/conda-forge/miniforge, or anaconda distribution as your needs)
 
 ```
-$ pip install -r requirements.txt
+$ conda create -n kebyt5-dev python=3.9
+$ conda activate kebyt5-dev
+$ conda env update -n kebyt5-dev  --file conda-environment.yaml
 ```
 
-### 실행 방법
-Tab으로 구분된 학습데이터 (입력<탭>정답<엔터>) 구성을 갖는 텍스트 파일을 통한 학습기 실행 방법은 다음과 같습니다:
+or you can use requirements.txt with python pip.
 
-run_script/train_s2s_kebyt5-small.sh 파일을 참조해도 좋습니다.
 
-```bash
+### Execute Trainer
+```
 python train.py -task seq2seq \
-  -train_data [학습 데이터 텍스트 파일 경로] \
-  { -valid_data [검증 데이터 텍스트 파일 경로, 없으면 생략 가능] } \
-  -valid_data_proportions [숫자, 예: 0.05. -valid_data 옵션으로 검증 데이터를 따로 입력시 생략 가능.] \
-  -save_path [학습 모델 및 로그 저장 위치, 없으면 자동으로 디렉터리가 생성됨] \
-  -init_model [ 사전학습 모델 파일 경로. pytorch_model.bin이 들어있는 디렉터리를 지정하면 됩니다. ] \
-  -max_epoch [최대 학습 epoch 수, 기본값 4] \
-  -optim [adam, adafactor 둘 중 하나. 예: adafactor] \
-  -learning_rate [adam 옵티마이저의 학습률. 기본 최적화 알고리즘인 adafactor를 사용하는 경우 자동으로 지정되며, 입력한 값은 무시됩니다.] \
-  -gpus [사용될 GPU 수] -strategy ddp \
-  -float_precision [연산 정밀도, 기본값 32. NVIDIA Ampere 급 이상을 사용하는 경우 16 지정 가능. 그 미만 카드에서는 16 지정시 NaN loss가 나올 수 있음] \
-  -grad_acc [gradient accumulation, 기본값 1] -batch_size [배치크기.]
-  -tuning_method [finetune 또는 lora]
-```
+-train_data [training data text path, input-label must be paired in a line as tab-separated text format (TSV).] \
+{ -valid_data [optional, validation data text path] } \
+-valid_data_proportions [defaults: 0.05] \
+-save_path [output checkpoint save path. directory will be created automatically.] \
+-init_model [initial pre-trained model file path, or huggingface-compatible model name, e.g. etri-lirs/kebyt5-base-preview] \
+-max_epoch [default: 4] \
+-optim [optimizer; can be one of 'adam', 'adafactor', 'cpuadam', 'adam8'] \
+-learning_rate [maximum learning rate. e.g. 8e-5] \
+-gpus [counts of the gpu] \
+-strategy [default: ddp, can be one of 'ddp', 'deepspeed_1', 'deepspeed_2_fusedadam', 'deepspeed_2_optim_offload', ...] \
+-float_precision [defaults: 32, you can assign 16 to use bf16(if supported), or fp16.] \
+-grad_acc [default: 1, # of gradient accumulation to increase effective batch size.] \
+-batch_size [default: 16, batch size per gpu or device.] \
+-tuning_method [default: 'finetune', you can use 'lora' with PEFT library.]
 
-"-tuning_method lora"를 설정하면, adapter model만 -save_path로 지정된 경로명 + \_adapter_ckpt 라는 위치에 -max_epoch 후 모델이 저장됩니다. 기본적으로는, 지정된 경로명 + \_hfmodel 이라는 이름으로 마지막 체크포인트가 huggingface 호환 모델로 저장됩니다.
+```	
 
-#### 이어서 학습하는 방법
-중단한 checkpoint로 부터 학습을 재개하려면, ``-resume_checkpoint [다시 시작하고 싶은 checkpoint 파일]`` 옵션을 지정하여 학습을 재개할 수 있습니다.
+if you want to resume training from last checkpoint, execute trainer with ``-resume_checkpoint [checkpoint path]`` option.
 
-#### 추론 테스트 방법
-```bash
-python inference.py \
-  -model [학습된 모델 checkpoint] \
-  -float_precision [연산 정밀도, 기본값 32.] \
-  -gpus 1 -batch_size [배치 크기, VRAM 크기에 맞게 조정] -task [태스크 명, task_utils.py 참조.]
-```
 
-탭으로 구분된 평가 데이터를 통한 평가 방법은 다음과 같습니다:
+### Execute Inference Test
 ```bash
 python inference.py -task seq2seq \
-  -test_data [테스트 데이터 파일 명] \
-  -model [.ckpt로 끝나는 학습 체크포인트 파일] \
-  -tokenizer [학습 당시의 init_model 옵션으로 넣은 모델 위치 또는 HF 모델 명. e.g. google/byt5-small] \
-  -gpus 1 -float_precision 32 \
-  -save_output [출력결과를 저장할 파일 이름] -batch_size 128 \
-  -beam_size [beam 크기. 기본값 1., 번역 등은 2~5 사이의 값을 사용 OK.] \
-  -max_predict_length [최대 추론 길이. 기본값 512. 레이블 추정의 경우 64~128로 설정하면 됨.]
+-test_data [file name of test data.] \
+-model [trained checkpoint file, ends with .ckpt extension, or deepspeed checkpoint path.] \
+-tokenizer [tokenizer path or huggingface-compatible model name, e.g. google/byt5-small] \
+-gpus 1 -float_precision 32 \
+-save_output [file name to save output results] -batch_size 64 \
+-beam_size [beam size, default: 1.] \
+-max_predict_length [maximum generation token length, default: 512 bytes for byt5 model.]
 ```
 
-#### lightning 모델 -> huggingface model 변환
-위의 학습기로 학습된 모델은 inference.py를 통해서 사용해야 하지만, 변환 후에는 다른 huggingface transformers 모델과 동일하게 from_pretrained() 메서드를 사용하여 모델 로딩 및 추론 코드 적용이 가능합니다. 변환기 사용법은 다음과 같습니다:
+
+### Convert lightning checkpoints to huggingface model
 
 ```bash
-python export_checkpoint_to_hfmodel.py [checkpoint 디렉터리/파일명] [출력될 huggingface 모델 디렉터리: 자동 생성됨]
+python export_checkpoint_to_hfmodel.py [checkpoint directory/file path] [output huggingface model path]
 ```
 
-deepspeed를 사용하여 학습된 경우에도, 디렉터리가 지정되면 자동으로 변환합니다. .ckpt 파일을 지정하면, pytorch ddp로 학습된 모델로 보고 바로 변환합니다.
 
-#### huggingface model의 seq2seq 추론 방법
-위의 lightning 모델 -> huggingface model 변환 후, 변환된 모델은 다음 코드로 추론 가능합니다:
+#### seq2seq inference test with huggingface model
 
 ```bash
 python hfmodel_s2s_inference.py \
-  -m [모델 파일 이름, 또는 경로. huggingface hub 모델 사용 가능] \
-  {-a [어댑터 모델 파일 이름: optional - tuning_method=lora로 학습된 모델의 경우]} \
-  {-t [토크나이저 모델/설정 위치: optional - 모델과 토크나이저가 다른 경우]} \
-  {-i [입력 텍스트 파일 명. 한줄 = 입력, 지정되지 않을 경우 표준입력(stdin)에서 읽음]} \
-  {-o [출력 텍스트 파일 명. 한줄 = 출력. 지정되지 않을 경우, 표준출력(stdout)으로 출력]}
+-m [model file path, or huggingface-compatible model name] \
+{-a [adapter model file path]} \
+{-t [tokenizer path, or name, when model has not tokenizer configuration]} \
+{-i [input text filename, which consists of a single input line. if it is not given from option, STDIN will be used.]} \
+{-o [output text filename, or STDOUT will be used.]}
 ```
 
-#### 실행 예시
-실행 예시로, nsmc 분류 테스트 샘플을 run_scripts 안에 포함하였습니다.
-  * SKT kobart-v2를 사용한 방법은 train_nsmc_skt-kobart-v2.sh 파일을,
-  * kebyt5-* 모델이 있으면 그에 맞게 train_nsmc_kebyt5-small.sh 파일 등을 살펴보시면 됩니다.
-  * 추론 예시는 nsmc_test.sh 파일을 참조하십시오.
 
-tab으로 구분된 데이터의 학습, 평가는 다음의 스크립트를 참조하십시오:
-  * 학습 - run_script/train_s2s_kebyt5-small.sh
-  * 평가(추론) - run_script/inference_s2s_kebyt5-small.sh
+#### Execution Examples
+As an example of execution, the nsmc classification test sample is included in run_scripts.
+   * If you want to use SKT kobart-v2:, see train_nsmc_skt-kobart-v2.sh file.
+   * If you have a kebyt5-* model, you can check the train_nsmc_kebyt5-small.sh file accordingly.
+
+Please refer to the nsmc_test.sh file for inference examples. For training and evaluation of tab-delimited data, please refer to the following script:
+   * Training - run_script/train_s2s_kebyt5-small.sh
+   * Evaluation (inference) - run_script/inference_s2s_kebyt5-small.sh
 
 
-## 더 해야 할 일
-  * 공개 라이선스 결정
-  * data collator를 datamodule에 통합 (PTLM 학습과 달리 stochastic한 조작이 필요없음) --> (23/01/30) 하지 않는 것으로. 불필요함.
-  * edit-distance based predict-label corrector를 datamodule에 통합, 새 메서드를 제공 --> (23/01/30) 추가 작업 필요. 일단은 datamodule에 label map을 binding 하도록 구현함
-  * 일부 텍스트 샘플로 huggingface datasets를 바로 생성하는 wrapper 모듈 정비 --> (23/02/21) 완료
-  * 학습/테스트/추론을 위한 데이터 연결을 프로그램 실행 인자로 할당하게 바꿔야 함
-  * 번역 태스크 구현, 다국어, zero-shot 테스트 등 (e.g. en-jp, trained on ko/en, ko/jp, ko/zh) --> tab으로 구분된 데이터를 처리하는 -task seq2seq 구현으로 대체
-  * adafactor 적용, scheduler의 경우 linear decaying 대신 cyclic lr이나 다른걸 사용해야 함 --> (23/01/30) 완료
-  * truncate/discard를 max_seq_length와 결합. max_seq_length가 의도대로 작동하게 수정 필요. --> 현재 discard만 작동.
-  * multi-gpu를 사용한 추론 루틴 구현, 테스트, uneven dataset의 distributed sampler 호환 등
+## Dependencies
+ * pytorch>=1.8.0
+ * pytorch-lightning>=1.9.0
+ * transformers>=4.27.0
+ * einops>=0.6.0
+ * evaluate
+ * datasets
+ * deepspeed
+
+see requirements.txt
+
+
+## Acknowledgement
+
+ * This software was supported by the Institute of Information & communication Technology Planning & Evaluation (IITP) grant funded by the Korea government(MSIT). (No. RS-2022-00187238, Development of Large Korean Language Model Technology for Efficient Pre-training)
+ * This software contains code of Cosine-Annealing with Warm-up LR Scheduler (in models.mlm_plmodule_wrapper.py file) implementation, which derived from katsura-jp/pytorch-cosine-annealing-with-warmup (https://github.com/katsura-jp/pytorch-cosine-annealing-with-warmup) github project, which distributed under MIT License. Copyright (C) 2022 Naoki Katsura. All Rights Reserved.
+ * This software includes lucidrains/charformer-pytorch GitHub project for GBST implementation, which distributed under MIT License. Copyright (c) 2021 Phil Wang. all rights reserved. (Original Code URL: https://github.com/lucidrains/charformer-pytorch)
+ * This software includes HuggingFace transformers's T5 implementation for GBST-enabled T5 model, which distributed under Apache 2.0 License. Copyright 2018- The Huggingface team. All rights reserved.
+
+     We are grateful for their excellent works.
+
