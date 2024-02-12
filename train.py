@@ -127,6 +127,8 @@ def get_argparser():
                         help="Cosine Annealing Gamma hyperparameter.")
     parser.add_argument("-optim_cosanneal_restarts", type=int, default=4,
                         help="Cosine Annealing Restart number of times.")
+    parser.add_argument("-optim_cosanneal_min_lr", type=float, default=1e-7,
+                        help="Minimum Learning Rate for Cosine-Annealing LR Scheduler.")
     parser.add_argument("-weight_decay", type=float, default=0.0,
                         help="weight decay value. default: disable=0.0")
     parser.add_argument("-grad_clip", type=float, default=1.0,
@@ -316,6 +318,7 @@ if __name__ == '__main__':
         gradient_checkpointing=grad_checkpointing,
         optim_cosanneal_gamma=args.optim_cosanneal_gamma,
         optim_cosanneal_restarts=args.optim_cosanneal_restarts,
+        optim_cosanneal_min_lr=args.optim_cosanneal_min_lr,
     )
 
     if args.freeze is not None:
