@@ -64,6 +64,7 @@ class Depthwise1dConv(nn.Module):
         self.convol = nn.Conv1d(in_dim, out_dim, krnl_size, groups=in_dim)
         self.proj = nn.Conv1d(out_dim, out_dim, 1)
 
+    @torch.cuda.amp.autocast(enabled=True, dtype=torch.float32)
     def forward(self, in_tensor):
         in_tensor = self.convol(in_tensor)
         return self.proj(in_tensor)
@@ -142,7 +143,7 @@ class GBSWT(nn.Module):
         """ return GBST candidate blocking list. """
         return self.blocks
 
-    @torch.cuda.amp.autocast()
+    @torch.cuda.amp.autocast(enabled=True, dtype=torch.float32)
     def forward(self, in_tensor, attention_mask=None):
         b, s = in_tensor.shape
         #print(f"initial shape: b, s : {b}, {s}, in_tensor.shape: {in_tensor.shape}")

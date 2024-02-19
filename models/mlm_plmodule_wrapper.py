@@ -218,7 +218,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
                                   'encoder.embed_tokens.positional_convol.2.proj.bias',
                                   'encoder.embed_tokens.cand_scoring.0.weight',
                                   'encoder.embed_tokens.cand_scoring.0.bias',
-                                  'shared.weight',
+                                  #'shared.weight',
                                   ]
             print("** GBST Model found, freeze GBSWT layers for training downstream.")
             for name, param in self.model.named_parameters():
