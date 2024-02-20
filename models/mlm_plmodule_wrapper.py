@@ -366,7 +366,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         return [optimizer], [scheduler]
 
     # pytorch-lightning 2에서는 def on_before_optimizer_step(self, optimizer)로 구성.
-    def on_before_optimizer_step(self, optimizer, optimizer_step):
+    def on_before_optimizer_step(self, optimizer, **kwargs):
         norms = grad_norm(self.model, norm_type=2)
         self.log_dict(norms)
 
