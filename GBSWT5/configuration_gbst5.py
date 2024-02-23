@@ -49,7 +49,9 @@ class GBSWT5Config(PretrainedConfig):
         subword_blocks=_BLOCKS,
         downsample_factor=1,
         score_consensus_attn=True,
-        z_loss=0.0,
+        z_loss=1e-4,
+        gbst_batchnorm=False,
+        kv_heads=None,                          # GQA-related options from here
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -78,6 +80,7 @@ class GBSWT5Config(PretrainedConfig):
         self.subword_blocks = subword_blocks
         self.downsample_factor = downsample_factor
         self.score_consensus_attn = score_consensus_attn
+        self.gbst_batchnorm = gbst_batchnorm
 
         # z_loss for computational stability.
         # see https://github.com/tensorflow/mesh/blob \
@@ -101,6 +104,9 @@ class GBSWT5Config(PretrainedConfig):
         # for backwards compatibility
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
+
+        # TODO: GQA-Related hyperparameters
+        self.kv_heads = kv_heads
 
         super().__init__(
             pad_token_id=pad_token_id,
