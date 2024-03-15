@@ -335,12 +335,12 @@ if __name__ == '__main__':
     if args.save_every > 0:
         checkpoint_cb = ModelCheckpoint(
             dirpath=checkpoint_dirpath,
-            filename='epoch{epoch:02d}-global_step{step}-val_loss{val_loss:.4f}',
-            monitor="val_loss",
+            filename='epoch{epoch:02d}-global_step{step}',
+            monitor="step",
             verbose=True,
             auto_insert_metric_name=False,
             # 'global_step'은 매뉴얼과 달리 올바르게 monitoring 되지 않는다. 사용하지 말것
-            mode="min",
+            mode="max",
             # -save_every(=150) * grad_acc(=32) = save checkpoints every 4800 steps
             save_top_k=args.save_last_k,
             every_n_train_steps=args.save_every,
