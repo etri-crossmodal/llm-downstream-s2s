@@ -238,6 +238,8 @@ if __name__ == '__main__':
                          precision=precision_arg,
                          strategy="ddp",
             )
+
+    model.eval()
     pred_outputs = trainer.predict(model, datamodule=data_module)
 
     test_helper.INFER_LABELS = [x["labels"] for x in pred_outputs]

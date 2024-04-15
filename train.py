@@ -439,9 +439,9 @@ if __name__ == '__main__':
         trainer.save_checkpoint(base_dirpath + "/save_checkpoint_fallback.pt")
         print("Fallback checkpoint was saved.")
     else:
-        if args.tuning_method != 'finetune':
+        if trainer.global_rank == 0 and args.tuning_method != 'finetune':
             # PEFT를 썼으면 바로 모델을 export 할 것.
             print("Trained With Parameter-Efficient Fine-Tuning, save adapter checkpoint.")
             model.export_hf_model(args.save_path.rstrip('/\\') + '_adapter_ckpt')
-        else:
+        elif trainer.global_rank == 0:
             model.export_hf_model(args.save_path.rstrip('/\\') + '_hfmodel')

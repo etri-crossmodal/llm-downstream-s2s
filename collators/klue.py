@@ -139,9 +139,10 @@ class KLUEMRCDataCollator:
                 #ctx = '\n'.join(ctx_lists)
 
                 # 가장 간단한 접근 - 길이가 문제다. 학습 때는 이렇게 해서는 안됨.
-                input_texts.append(f"task: MRC, 지문을 읽고 질문에 답을 할 수 없다면 '[알 수 없음]'을 출력한다.\n"
-                                   f"질문: {questions[idx]}\n"
-                                   f"지문: {ctx}\n")
+                input_texts.append(f"task: MRC, 지문을 읽고 질문에 답을 할 수 없다면 '[알 수 없음]'을 출력한다.\n\n"
+                                   f"### 질문\n{questions[idx]}\n\n"
+                                   f"### 지문\n{ctx}\n"
+                                   )
                 # 비슷한 질문을 찾아보고 답이 있나 없나를 보게 할 것인가?
                 # 아니면 그냥 관련있는 지문이 없다고 하고 끝 낼 것인가?
                 """
@@ -159,7 +160,7 @@ class KLUEMRCDataCollator:
                         label_base = f"-1 // 정답 없음}"
                         print("** WARNING: klue-mrc, label text not found in contexts, but not impossibles.")
                         print(f"{ctx}")
-                        print(f"정답: {labels['text'][idx]}") 
+                        print(f"정답: {labels['text'][idx]}")
                 """
                 if is_impos:
                     # 정답이 나올 수 없으면 다음과 같이 한다:
@@ -169,7 +170,7 @@ class KLUEMRCDataCollator:
                         label_base = "출력: [알 수 없음]\n정답임"
                     else:
                         # 이렇게 숙의를 하게 하는게 맞는건가? 아니면 정답을 냈을 때 아니라고 하고 덮어 쓰는게 맞는가?
-                        label_base = f"출력: {labels['text'][idx]}\n정답이 아님, 새 정답: [알 수 없음]" 
+                        label_base = f"출력: {labels['text'][idx]}\n정답이 아님, 새 정답: [알 수 없음]"
                 else:
                     # 이 경우에도 가끔씩 '알 수 없음' + 정답이 아님 을 출력하게 해야 함. 3%를 하게 하자.
                     # 숫자는 전체의 1/10에 적용
@@ -177,7 +178,7 @@ class KLUEMRCDataCollator:
                     if choice_val < 3 or \
                             (re.search("[0-9]", labels['text'][idx]) is not None and random.randrange(0, 10) < 1):
                         albl = labels['text'][idx]
-                        # add random noise - replace character with some constraints 
+                        # add random noise - replace character with some constraints
                         # 일단 바꿀 위치를 결정하고 replace만 해 본다. delete/insertion도 해 봐야 하나?
                         repl_pos = random.randrange(0, len(albl))
                         if re.match("[0-9]", albl[repl_pos]) is not None:
