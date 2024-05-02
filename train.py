@@ -127,6 +127,8 @@ def get_argparser():
                         help="Cosine Annealing Gamma hyperparameter.")
     parser.add_argument("-optim_cosanneal_restarts", type=int, default=4,
                         help="Cosine Annealing Restart number of times.")
+    parser.add_argument("-optim_cosanneal_min_lr", type=float, default=1e-7,
+                        help="Minimum Learning Rate for Cosine-Annealing LR Scheduler.")
     parser.add_argument("-weight_decay", type=float, default=0.0,
                         help="weight decay value. default: disable=0.0")
     parser.add_argument("-grad_clip", type=float, default=1.0,
@@ -316,6 +318,7 @@ if __name__ == '__main__':
         gradient_checkpointing=grad_checkpointing,
         optim_cosanneal_gamma=args.optim_cosanneal_gamma,
         optim_cosanneal_restarts=args.optim_cosanneal_restarts,
+        optim_cosanneal_min_lr=args.optim_cosanneal_min_lr,
     )
 
     if args.freeze is not None:
@@ -332,12 +335,12 @@ if __name__ == '__main__':
     if args.save_every > 0:
         checkpoint_cb = ModelCheckpoint(
             dirpath=checkpoint_dirpath,
-            filename='epoch{epoch:02d}-global_step{step}-val_loss{val_loss:.4f}',
-            monitor="val_loss",
+            filename='epoch{epoch:02d}-global_step{step}',
+            monitor="step",
             verbose=True,
             auto_insert_metric_name=False,
             # 'global_step'은 매뉴얼과 달리 올바르게 monitoring 되지 않는다. 사용하지 말것
-            mode="min",
+            mode="max",
             # -save_every(=150) * grad_acc(=32) = save checkpoints every 4800 steps
             save_top_k=args.save_last_k,
             every_n_train_steps=args.save_every,
@@ -436,9 +439,9 @@ if __name__ == '__main__':
         trainer.save_checkpoint(base_dirpath + "/save_checkpoint_fallback.pt")
         print("Fallback checkpoint was saved.")
     else:
-        if args.tuning_method != 'finetune':
+        if trainer.global_rank == 0 and args.tuning_method != 'finetune':
             # PEFT를 썼으면 바로 모델을 export 할 것.
             print("Trained With Parameter-Efficient Fine-Tuning, save adapter checkpoint.")
             model.export_hf_model(args.save_path.rstrip('/\\') + '_adapter_ckpt')
-        else:
+        elif trainer.global_rank == 0:
             model.export_hf_model(args.save_path.rstrip('/\\') + '_hfmodel')

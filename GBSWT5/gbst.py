@@ -17,13 +17,16 @@ import torch.nn.functional as F
 from typing import Optional
 
 from torch import einsum, nn, Tensor
+from transformers.utils import logging
 from einops.layers.torch import Rearrange
 from einops import rearrange, repeat
 
 
+logger = logging.get_logger(__name__)
+
 # Block definition
 _BLOCKS = (
-    (1, 0), (2, 0), (3, 0),
+    (1, 0), (2, 0), (3, 0), (4, 0),
     (6, 0), (9, 0),
     #(12, 0), (12, 3), (12, 6), (12, 9)
 )
@@ -43,36 +46,30 @@ def pad_to_multiple(in_tensor:Tensor, multiple:int, seq_dim:int,
     return F.pad(in_tensor, (d1, d2, 0, padded_len - seqlen), value=value)
 
 
-def masked_mean(in_tensor:Tensor, mask:Tensor, dim:int=-1):
-    len_diff = len(in_tensor.shape) - len(mask.shape)
-    #print(f"len_diff: {len_diff}, in_tensor.shape: {in_tensor.shape}, mask.shape: {mask.shape}")
-    # shape will differ from 1?
-    mask = torch.unsqueeze(mask, dim=-len_diff)
-    #print(f"new mask.shape: {mask.shape}")
-    # NOTICE: if tensor size mismatches, please check shape of a 'attention_mask' and 'input_ids'.
-    in_tensor.masked_fill_(~(mask.bool()), 0.)
-
-    total_elems = mask.sum(dim=dim)
-    mean = in_tensor.sum(dim=dim) / total_elems.clamp(min=1.)
-    mean.masked_fill_((total_elems == 0), 0.)
-    return mean.float()
 
 
 class Depthwise1dConv(nn.Module):
-    def __init__(self, in_dim, out_dim, krnl_size):
+    def __init__(self, in_dim, out_dim, krnl_size, use_bn=False):
         super().__init__()
+        self.use_bn = use_bn
         self.convol = nn.Conv1d(in_dim, out_dim, krnl_size, groups=in_dim)
+        # EXPERIMENTAL: add BatchNorm Layer
+        if self.use_bn:
+            self.bn = nn.BatchNorm1d(out_dim, eps=1e-05,)
         self.proj = nn.Conv1d(out_dim, out_dim, 1)
 
+    @torch.cuda.amp.autocast(enabled=True, dtype=torch.float32)
     def forward(self, in_tensor):
         in_tensor = self.convol(in_tensor)
+        if self.use_bn:
+            in_tensor = self.bn(in_tensor)
         return self.proj(in_tensor)
 
     def _init_weights(self, factor:float=0.05):
-        print(f"1dConv-Weight initialize called, before: {self.convol.weight.data}")
+        logger.debug(f"1dConv-Weight initialize called, before: {self.convol.weight.data}")
         self.convol.weight.data.normal_(mean=0.0, std=factor * 1.0)
         self.proj.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        print(f"1dConv-Weight initialize called, after: {self.convol.weight.data}")
+        logger.debug(f"1dConv-Weight initialize called, after: {self.convol.weight.data}")
 
 
 class Padding(nn.Module):
@@ -91,7 +88,8 @@ class GBSWT(nn.Module):
                  max_block_size=None,
                  blocks=_BLOCKS,
                  downsample_factor=1,
-                 score_consensus_attn=True,):
+                 score_consensus_attn=True,
+                 use_bn=False,):
         super().__init__()
         num_tokens, dim = embed_tokens.weight.shape
 
@@ -112,8 +110,9 @@ class GBSWT(nn.Module):
 
         self.downsample_factor = downsample_factor
         self.score_consensus_attn = score_consensus_attn
-        print(f"** GBSWT: Subword Block Combinations: {self.blocks}")
-        print(f"** GBSWT: Downsampling factor: {self.downsample_factor}")
+        self.use_bn = use_bn
+        logger.debug(f"GBSWT Subword Block Combinations: {self.blocks}")
+        logger.debug(f"GBSWT Downsampling factor: {self.downsample_factor}, use BatchNorm: {self.use_bn}")
 
         def lcm(*num):
             return int(functools.reduce(lambda x, y: int((x * y) / math.gcd(x, y)), num, 1))
@@ -126,7 +125,7 @@ class GBSWT(nn.Module):
         self.positional_convol = nn.Sequential(
             Padding((0, 0, 0, max_block_size-1)),
             Rearrange('b s d -> b d s'),
-            Depthwise1dConv(dim, dim, krnl_size=max_block_size),
+            Depthwise1dConv(dim, dim, krnl_size=max_block_size, use_bn=self.use_bn,),
             Rearrange('b d s -> b s d'))
         self.cand_scoring = nn.Sequential(
             nn.Linear(dim, 1),
@@ -134,15 +133,28 @@ class GBSWT(nn.Module):
 
     def _init_weights(self, factor:float=0.05):
         self.positional_convol[2]._init_weights(factor)
-        print(f"GBSTW weight initialization called: before: {self.cand_scoring[0].weight.data}")
+        #print(f"GBSTW weight initialization called: before: {self.cand_scoring[0].weight.data}")
         self.cand_scoring[0].weight.data.normal_(mean=0.0, std=factor * 1.0)
-        print(f"GBSTW weight initialization called: after: {self.cand_scoring[0].weight.data}")
+        #print(f"GBSTW weight initialization called: after: {self.cand_scoring[0].weight.data}")
 
     def get_blocks(self):
         """ return GBST candidate blocking list. """
         return self.blocks
 
-    @torch.cuda.amp.autocast()
+    def get_resized_mask(self, mask):
+        """ mask vector만 resize 시켜줌 """
+        b, s = mask.shape
+        block_multi, ds_factor = self.block_pad_multiple, self.downsample_factor
+        mask = pad_to_multiple(mask, block_multi,
+                               seq_dim=1, dim=-1, value=False)
+        m = int(math.ceil(s / ds_factor) * ds_factor)
+        mask = mask[:, :m]
+        mask = rearrange(mask, 'b (n m) -> b n m', m=ds_factor)
+        mask = torch.any(mask, dim=-1)
+
+        return mask
+
+    @torch.cuda.amp.autocast(enabled=True, dtype=torch.float32)
     def forward(self, in_tensor, attention_mask=None):
         b, s = in_tensor.shape
         #print(f"initial shape: b, s : {b}, {s}, in_tensor.shape: {in_tensor.shape}")
@@ -157,6 +169,16 @@ class GBSWT(nn.Module):
         if mask is not None:
             mask = pad_to_multiple(mask, block_multi,
                                    seq_dim=1, dim=-1, value=False)
+
+        def _masked_mean(in_tensor:Tensor, mask:Tensor, dim:int=-1):
+            len_diff = len(in_tensor.shape) - len(mask.shape)
+            mask = torch.unsqueeze(mask, dim=-len_diff)
+            in_tensor.masked_fill_(~(mask.bool()), 0.)
+
+            total_elems = mask.sum(dim=dim)
+            mean = in_tensor.sum(dim=dim) / total_elems.clamp(min=1.)
+            mean.masked_fill_((total_elems == 0), 0.)
+            return mean.float()
 
         block_reprs, block_masks = [], []
 
@@ -177,7 +199,7 @@ class GBSWT(nn.Module):
             blks = rearrange(block_in, 'b (s m) d -> b s m d', m=block_size)
             if mask is not None:
                 mask_blks = rearrange(block_mask, 'b (s m) -> b s m', m=block_size)
-                blk_repr = masked_mean(blks, mask_blks, dim=-2)
+                blk_repr = _masked_mean(blks, mask_blks, dim=-2)
             else:
                 blk_repr = blks.mean(dim=-2)
 
@@ -196,7 +218,7 @@ class GBSWT(nn.Module):
                 block_masks.append(mask_blks)
 
         # stack them all
-        block_reprs = torch.stack(block_reprs, dim=2)
+        block_reprs = torch.stack(block_reprs, dim=2,)
         scores = self.cand_scoring(block_reprs)
 
         if mask is not None:
@@ -228,20 +250,15 @@ class GBSWT(nn.Module):
             #print(f"_reshape_input_tensor: {m}")
             return in_tensor[:, :m]
 
-        #print(f"current m: {m}")
-        #in_tensor = in_tensor[:, :m]
-        #if mask is not None:
-        #    mask = mask[:, :m]
         in_tensor = _reshape_input_tensor(in_tensor, s, ds_factor)
         if mask is not None:
             mask = _reshape_input_tensor(mask, s, ds_factor)
-        #print(f"after_shape: {in_tensor.shape}, {mask.shape}")
 
         # downsample with mean pooling
         in_tensor = rearrange(in_tensor, 'b (n m) d -> b n m d', m=ds_factor)
         if mask is not None:
             mask = rearrange(mask, 'b (n m) -> b n m', m=ds_factor)
-            in_tensor = masked_mean(in_tensor, mask, dim=2)
+            in_tensor = _masked_mean(in_tensor, mask, dim=2)
             mask = torch.any(mask, dim=-1)
         else:
             in_tensor = in_tensor.mean(dim=-2)

@@ -148,6 +148,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
                  gradient_checkpointing: bool=False,
                  optim_cosanneal_gamma=0.75,        # Optimizer: Cosine-Annealing Gamma Hparam
                  optim_cosanneal_restarts=4,        # Optimizer: Cosine-Annealing Restarting number of times
+                 optim_cosanneal_min_lr=1e-7,       # Optimizer: Cosine-Annealing Minimum LR rate
                  **kwargs):
         super(ETRIT5ConditionalGenModelLightningModule, self).__init__()
         self.save_hyperparameters(ignore=['data_collator',])
@@ -207,6 +208,25 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         self.data_collator = data_collator
         self.acc_metric = evaluate.load("accuracy")
         self.tknizer = None
+
+        if isinstance(model_cfg, GBSWT5.GBSWT5Config):
+            # 만약 GBSWT 모델이면 GBST 레이어를 frozen.
+            gbst_frozen_target = ['encoder.embed_tokens.embeds.weight',
+                                  'encoder.embed_tokens.positional_convol.2.convol.weight',
+                                  'encoder.embed_tokens.positional_convol.2.convol.bias',
+                                  'encoder.embed_tokens.positional_convol.2.proj.weight',
+                                  'encoder.embed_tokens.positional_convol.2.proj.bias',
+                                  'encoder.embed_tokens.cand_scoring.0.weight',
+                                  'encoder.embed_tokens.cand_scoring.0.bias',
+                                  #'shared.weight',
+                                  ]
+            print("** GBST Model found, freeze GBSWT layers for training downstream.")
+            for name, param in self.model.named_parameters():
+                if name in gbst_frozen_target:
+                    print(f"** freeze {name} layer.")
+                    param.requires_grad = False
+                else:
+                    param.requires_grad = True
 
         if self.hparams.tuning_method == "finetune" and gradient_checkpointing is True:
             print("** Gradient Checkpointing Enabled, and computation cache will be disabled.")
@@ -327,7 +347,8 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
                 optimizer,
                 first_cycle_steps=self.trainer.estimated_stepping_batches / self.hparams.optim_cosanneal_restarts,
                 cycle_mult=1.0, max_lr=self.hparams.learning_rate,
-                min_lr=1e-7, warmup_steps=self.hparams.warmup_steps,
+                min_lr=self.hparams.optim_cosanneal_min_lr,
+                warmup_steps=self.hparams.warmup_steps,
                 gamma=self.hparams.optim_cosanneal_gamma,
                 #num_training_steps=self.trainer.estimated_stepping_batches,
             )
@@ -345,7 +366,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         return [optimizer], [scheduler]
 
     # pytorch-lightning 2에서는 def on_before_optimizer_step(self, optimizer)로 구성.
-    def on_before_optimizer_step(self, optimizer, optimizer_step):
+    def on_before_optimizer_step(self, optimizer, **kwargs):
         norms = grad_norm(self.model, norm_type=2)
         self.log_dict(norms)
 
