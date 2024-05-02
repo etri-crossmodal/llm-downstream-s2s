@@ -233,7 +233,7 @@ class KLUENERDataCollator:
 
                 notag_sent = re.sub("<(.+?):[A-Z][A-Z]>", "\\1", sentence)
                 only_tags = ' '.join(re.findall("<.+?:[A-Z][A-Z]>", sentence))
-                input_texts.append(f"task: NER\n\nInput: {notag_sent}\n")
+                input_texts.append(f"task: NER\n\n### 입력\n{notag_sent}\n")
                 # set shortest label data
                 label_texts.append(sentence)
                 #label_texts.append(only_tags)

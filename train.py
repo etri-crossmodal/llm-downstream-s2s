@@ -329,6 +329,8 @@ if __name__ == '__main__':
                 model.freeze_encoder(True)
             elif target == "decoder":
                 model.freeze_decoder(True)
+            elif target == "gbst":
+                model.freeze_gbswt(True)
 
     # add checkpoint saver
     # 이건 gradient acc때문임: every_n_train_steps * gradient_acc = 실제 저장되는 시점

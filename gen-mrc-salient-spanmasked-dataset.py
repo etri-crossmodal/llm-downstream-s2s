@@ -73,13 +73,15 @@ for doc in tqdm(docs):
 
         for i in range(0, MASKING_SPLITS, 1):
             for ne in ner_list[i::MASKING_SPLITS]:
+                # 이렇게 처리하면 방향이 모두 틀어진다. 다시 수정 필요함.
                 inputs[i] = inputs[i].replace(ne[0], f"<extra_id_{extid_nos[i]}", 1)
-                outputs[i] += f" <extra_id_{extid_nos[i]}>" + ne[0]
+                outputs[i] += f"<extra_id_{extid_nos[i]}>" + ne[0]
                 extid_nos[i] += 1
             input_ctxs[i].append(inputs[i])
             output_lbls[i].append(outputs[i])
 
         current_input_ctx_len += blen
+
 
     # document 경계를 넘지 않게 flush 해야 함
     if len(input_ctxs[0]) > 0:
