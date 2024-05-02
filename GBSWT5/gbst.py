@@ -111,8 +111,8 @@ class GBSWT(nn.Module):
         self.downsample_factor = downsample_factor
         self.score_consensus_attn = score_consensus_attn
         self.use_bn = use_bn
-        logger.debug(f"GBSWT Subword Block Combinations: {self.blocks}")
-        logger.debug(f"GBSWT Downsampling factor: {self.downsample_factor}, use BatchNorm: {self.use_bn}")
+        logger.info(f"GBSWT Subword Block Combinations: {self.blocks}")
+        logger.info(f"GBSWT Downsampling factor: {self.downsample_factor}, use BatchNorm: {self.use_bn}")
 
         def lcm(*num):
             return int(functools.reduce(lambda x, y: int((x * y) / math.gcd(x, y)), num, 1))

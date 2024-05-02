@@ -16,6 +16,8 @@ import evaluate
 import GBSWT5
 
 from typing import Optional, Callable, Any, Union
+from packaging.version import Version
+
 from torch import nn
 from torch.optim.lr_scheduler import _LRScheduler
 from transformers import (T5ForConditionalGeneration,
@@ -206,7 +208,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
             self.model.print_trainable_parameters()
 
         self.data_collator = data_collator
-        self.acc_metric = evaluate.load("accuracy")
+        #self.acc_metric = evaluate.load("accuracy")
         self.tknizer = None
 
         if isinstance(model_cfg, GBSWT5.GBSWT5Config):
@@ -366,7 +368,11 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         return [optimizer], [scheduler]
 
     # pytorch-lightning 2에서는 def on_before_optimizer_step(self, optimizer)로 구성.
-    def on_before_optimizer_step(self, optimizer, **kwargs):
+    def _on_before_optimizer_step_v1(self, optimizer, optimizer_step):
+        norms = grad_norm(self.model, norm_type=2)
+        self.log_dict(norms)
+
+    def _on_before_optimizer_step_v2(self, optimizer, **kwargs):
         norms = grad_norm(self.model, norm_type=2)
         self.log_dict(norms)
 
@@ -468,3 +474,8 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         print("\nand You can safely ignore some missing state_dict, "
               "e.g. model.encoder.embed_tokens.weight.")
 
+
+# pytorch-lightning version에 따르는 on_before_optimizer_step() method.
+ETRIT5ConditionalGenModelLightningModule.on_before_optimizer_step = \
+    ETRIT5ConditionalGenModelLightningModule._on_before_optimizer_step_v1 if Version(pl.__version__) < Version("2.0") else \
+    ETRIT5ConditionalGenModelLightningModule._on_before_optimizer_step_v2
