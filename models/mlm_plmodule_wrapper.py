@@ -211,6 +211,20 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         #self.acc_metric = evaluate.load("accuracy")
         self.tknizer = None
 
+        if self.hparams.tuning_method == "finetune" and gradient_checkpointing is True:
+            print("** Gradient Checkpointing Enabled, and computation cache will be disabled.")
+            self.model.gradient_checkpointing_enable()
+
+        if isinstance(tokenizer, str):
+            self.tknizer = AutoTokenizer.from_pretrained(tokenizer, use_auth_token=True)
+        elif isinstance(tokenizer, Callable):
+            self.tknizer = tokenizer
+
+    def forward(self, **inputs):
+        #print(type(inputs["input_ids"]))
+        return self.model(**inputs)
+
+    def freeze_gbswt(self, freeze=True):
         if isinstance(model_cfg, GBSWT5.GBSWT5Config):
             # 만약 GBSWT 모델이면 GBST 레이어를 frozen.
             gbst_frozen_target = ['encoder.embed_tokens.embeds.weight',
@@ -229,19 +243,8 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
                     param.requires_grad = False
                 else:
                     param.requires_grad = True
-
-        if self.hparams.tuning_method == "finetune" and gradient_checkpointing is True:
-            print("** Gradient Checkpointing Enabled, and computation cache will be disabled.")
-            self.model.gradient_checkpointing_enable()
-
-        if isinstance(tokenizer, str):
-            self.tknizer = AutoTokenizer.from_pretrained(tokenizer, use_auth_token=True)
-        elif isinstance(tokenizer, Callable):
-            self.tknizer = tokenizer
-
-    def forward(self, **inputs):
-        #print(type(inputs["input_ids"]))
-        return self.model(**inputs)
+        else:
+            print("** GBST Layer not found, skip freezing GBST-related layers.")
 
     def freeze_shared_embeddings(self, freeze=True):
         whole = self.model
