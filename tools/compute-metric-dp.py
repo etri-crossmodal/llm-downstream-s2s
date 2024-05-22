@@ -12,7 +12,7 @@
 
     LAS는 gold의 head != pred의 head면 pred의 deprel을 -2(=BAD)로 바꾼 뒤,
     sklearn.metric.f1_score를 사용하여 macro average F1을 KLUE 공식 수치로 사용한다.
-    
+
     LAS 계산을 위해서, deprel은 인덱스 번호가 15보다 크거나 같으면 -3으로 통일하여
     계산을 수행한다. (as https://arxiv.org/pdf/2105.09680.pdf, page 35.)
     see also - https://github.com/KLUE-benchmark/KLUE-baseline/blob/main/klue_baseline/metrics/functional.py:141
@@ -42,9 +42,9 @@ from sklearn.metrics import f1_score
 
 # v3c, v3d
 GOLD_FILENAME = "./klue_dp_gold_out-v3d.txt"
-PRED_FILENAME = "./klue_dp_pred_out_kebyt5-large-v3d-230817.txt"
+PRED_FILENAME = "./klue_dp_pred_out_gbst-base-1144k-ssm-lr7e-5-v3d-240521.txt"
 
-# 구조분석 레이블. KLUE-baseline 코드에서 가져옴.  
+# 구조분석 레이블. KLUE-baseline 코드에서 가져옴.
 # https://github.com/KLUE-benchmark/KLUE-baseline/blob/8a03c9447e4c225e806877a84242aea11258c790/klue_baseline/data/klue_dp.py#L490
 dep_labels = ["NP", "NP_AJT", "VP", "NP_SBJ", "VP_MOD",
               "NP_OBJ", "AP", "NP_CNJ", "NP_MOD", "VNP",
@@ -65,14 +65,14 @@ def read_predicts(filename):
 
     lines = 0
     with open(filename, "rt", encoding="utf-8") as in_f:
-        for aline in in_f:        
+        for aline in in_f:
             lines += 1
             if aline[:5] == "lemma":
                 # lemma line
                 lemmas.append(aline.strip()[6:])
             elif aline[:5] == 'depre':
                 # dep line
-                aline = aline[8:] 
+                aline = aline[8:]
                 #print(aline)
                 deps = aline.split('▁')
                 heads_list = []
@@ -87,7 +87,7 @@ def read_predicts(filename):
                     heads_list.append(-2 if mat is None else int(mat.groups()[1]))
                     if mat is not None:
                         lbl = mat.groups()[2]
-                        if lbl in dep_labels: 
+                        if lbl in dep_labels:
                             lbl_value = dep_labels.index(lbl)
                         else:
                             lbl_value = -2          # 레이블이 없으면 -2 = BAD로
@@ -111,6 +111,11 @@ def read_predicts(filename):
 
 
 if __name__ == '__main__':
+    # 순서는 pred, gold 순서
+    if list(sys.argv) > 2:
+        PRED_FILENAME = list(sys.argv)[1]
+        GOLD_FILENAME = list(sys.argv)[2]
+
     # 정답파일 load
     print(f"read gold: {GOLD_FILENAME}")
     gold_lemmas, gold_heads, gold_deprels = read_predicts(GOLD_FILENAME)
@@ -120,7 +125,7 @@ if __name__ == '__main__':
     assert len(gold_heads) == len(pred_heads), f"gold heads: {len(gold_heads)}, pred_heads: {len(pred_heads)}"
 
     aligned_pred_heads, aligned_pred_deprels = [], []
-    
+
     shorter_pred_head, longer_pred_head = 0, 0
     shorter_pred_deprel, longer_pred_deprel = 0, 0
 
