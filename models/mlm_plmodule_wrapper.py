@@ -220,12 +220,14 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         elif isinstance(tokenizer, Callable):
             self.tknizer = tokenizer
 
+        self.model_cfg = model_cfg
+
     def forward(self, **inputs):
         #print(type(inputs["input_ids"]))
         return self.model(**inputs)
 
     def freeze_gbswt(self, freeze=True):
-        if isinstance(model_cfg, GBSWT5.GBSWT5Config):
+        if isinstance(self.model_cfg, GBSWT5.GBSWT5Config):
             # 만약 GBSWT 모델이면 GBST 레이어를 frozen.
             gbst_frozen_target = ['encoder.embed_tokens.embeds.weight',
                                   'encoder.embed_tokens.positional_convol.2.convol.weight',
