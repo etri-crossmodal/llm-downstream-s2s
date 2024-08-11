@@ -154,6 +154,9 @@ class GBSWT(nn.Module):
 
         return mask
 
+    # autocast() 만 사용시 CUDA에서는 torch.float16을 사용하게 된다.
+    # 이는 dynamic range 문제를 일으키고, cand_scoring()에서 65535~-65535를 넘어가게 되면서
+    # inf로 빠지게 된다. 그래서 dtype을 float32(또는 bfloat16)으로 지정한다.
     @torch.cuda.amp.autocast(enabled=True, dtype=torch.float32)
     def forward(self, in_tensor, attention_mask=None):
         b, s = in_tensor.shape
@@ -164,6 +167,7 @@ class GBSWT(nn.Module):
 
         in_tensor = self.embeds(in_tensor)
         in_tensor = self.positional_convol(in_tensor)
+
         in_tensor = pad_to_multiple(in_tensor, block_multi,
                                     seq_dim=1, dim=-2, value=0.0)
         if mask is not None:
@@ -219,13 +223,35 @@ class GBSWT(nn.Module):
 
         # stack them all
         block_reprs = torch.stack(block_reprs, dim=2,)
-        scores = self.cand_scoring(block_reprs)
 
+        scores = self.cand_scoring(block_reprs)
+        scores_init = scores
+
+        """
+        if not torch.isfinite(scores).all() or torch.isnan(scores).any():
+            torch.save({'in_embed': in_embed, 'in_posconv': in_posconv,
+                        'block_reprs': block_reprs,
+                        'block_masks': block_masks, 'initial': scores_init,
+                        'score': scores,
+                        }, "./nan_dump.pth")
+            raise Exception("nan found in candidate scoring #1")
+        """
         if mask is not None:
             block_masks = torch.stack(block_masks, dim=2)
             max_neg_val = -torch.finfo(scores.dtype).max
             scores = scores.masked_fill(~block_masks, max_neg_val)
 
+        """
+        if not torch.isfinite(scores).all() or torch.isnan(scores).any():
+            torch.save({'in_embed': in_embed, 'in_posconv': in_posconv,
+                        'block_reprs': block_reprs,
+                        'block_masks': block_masks, 'initial': scores_init,
+                        'score': scores,
+                        }, "./nan_dump.pth")
+            raise Exception("nan found in candidate scoring #2-1")
+
+        print(f"## scores: {scores}, dtype={scores.dtype}")
+        """
         scores = scores.softmax(dim=2)
 
         # cheap consensus attention, as equation (5) in paper.

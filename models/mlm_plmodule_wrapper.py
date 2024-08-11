@@ -466,6 +466,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
         # FIXME: import safetensors 및 safe_serialize=True 추가
         self.model.save_pretrained(model_save_path,
                                    is_main_process=True,
+                                   safe_serialization=False,
                                    push_to_hub=False,)
         # tokenizer 추가 정보 저장은 PEFT 미 사용시에만 적용?
         self.tknizer.save_pretrained(model_save_path)

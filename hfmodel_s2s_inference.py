@@ -64,6 +64,7 @@ def get_adaptered_model(basemodel_instance, adapter_path):
         if isinstance(basemodel_instance, str):
             basemodel_instance = AutoModelForSeq2SeqLM.from_pretrained(basemodel_instance,
                                                                        device_map="auto",
+                                                                       trust_remote_code=True,
                                                                        use_auth_token=True)
         logger.warning("Prepare PEFT Model from basemodel.")
         return PeftModel.from_pretrained(basemodel_instance, adapter_path)
