@@ -54,7 +54,7 @@ def get_task_data(task_name: str, batch_size: int,
         collator = generic.GenericDataCollator(input_field_name="document",
                                                label_field_name="label",
                                                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
-                                                                                       use_auth_token=True),
+                                                                                       token=True),
                                                label_map={0: 'positive', 1: 'negative'},
                                                max_seq_length=max_seq_length,)
         gold_labels = {"positive":0, "negative":1}
@@ -65,7 +65,7 @@ def get_task_data(task_name: str, batch_size: int,
             label_field_name="label",
             input_template="nsmc sentiment classification: {{ input }}",
             label_template="{{ label }}",
-            tokenizer=AutoTokenizer.from_pretrained(tokenizer_str, use_auth_token=True),
+            tokenizer=AutoTokenizer.from_pretrained(tokenizer_str, token=True),
             label_map={0:'positive', 1:'negative'},
             max_seq_length=max_seq_length,)
         gold_labels = {"positive":0, "negative":1}
@@ -76,7 +76,7 @@ def get_task_data(task_name: str, batch_size: int,
         base_tag_pair = {"함의":0, "중립":1, "모순":2}
         data_module = KLUENLIDataModule(batch_size=batch_size)
         collator = klue.KLUENLIDataCollator(tokenizer=AutoTokenizer.from_pretrained(
-            tokenizer_str, use_auth_token=True),
+            tokenizer_str, token=True),
             label_map=dict([(v, k) for k, v in base_tag_pair.items()]), # invert k-v pair
             max_seq_length=max_seq_length,)
         gold_labels = base_tag_pair
@@ -84,20 +84,20 @@ def get_task_data(task_name: str, batch_size: int,
         # Example: KLUE-YNAT
         data_module = KLUEYNATDataModule(batch_size=batch_size)
         collator = klue.KLUEYNATDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
-                                                                                     use_auth_token=True),
+                                                                                     token=True),
                                             max_seq_length=max_seq_length,)
         gold_labels = {'IT과학':0, '경제':1, '사회':2, '생활문화':3, '세계':4, '스포츠':5, '정치':6}
     elif task_name == 'kornli-prompted':
         # Example 3: KorNLI
         data_module = KorNLIDataModule(batch_size=batch_size)
         collator = klue.KLUENLIDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
-                                                                                    use_auth_token=True),
+                                                                                    token=True),
                                             max_seq_length=max_seq_length,)
         gold_labels = {"entailment":0, "neutral":1, "contradiction":2}
     elif task_name == 'paws-x-kor':
         data_module = paws_xDataModule(batch_size=batch_size)
         collator = pawsx.PAWS_XDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
-                                                                                    use_auth_token=True),
+                                                                                    token=True),
                                             max_seq_length=max_seq_length,)
         gold_labels = {'IT/science':0, 'economy':1, 'social':2,
                        'life and culture':3, 'world':4, 'sports':5, 'politics':6}
@@ -107,7 +107,7 @@ def get_task_data(task_name: str, batch_size: int,
         # MTL
         data_module = korTrainTextDataModule(batch_size=batch_size, use_mtl=False)
         collator = korail_internal.korailCollatorV1(
-            tokenizer=AutoTokenizer.from_pretrained(tokenizer_str, use_auth_token=True),
+            tokenizer=AutoTokenizer.from_pretrained(tokenizer_str, token=True),
             label_map=data_module.id_to_label_func(),
             length_limit=max_seq_length)
         """
@@ -115,7 +115,7 @@ def get_task_data(task_name: str, batch_size: int,
                 label_field_name="label",
                 input_template="Classification Test:\n\n{{ input }}",
                 label_template="{{ label }}",
-                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str, use_auth_token=True),
+                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str, token=True),
                 # get callable to label mapping
                 label_map=data_module.id_to_label_func(),
                 #label_map=data_module.id_to_label_map_dict(),
@@ -133,7 +133,7 @@ def get_task_data(task_name: str, batch_size: int,
                 label_field_name="label",
                 input_template="Multitask classification:\n\n{{ input }}",
                 label_template="{{ label }}",
-                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str, use_auth_token=True),
+                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str, token=True),
                 # get callable to label mapping
                 label_map=data_module.id_to_label_func(),
                 #label_map=data_module.id_to_label_map_dict(),
@@ -148,7 +148,7 @@ def get_task_data(task_name: str, batch_size: int,
         data_module = KLUEMRCDataModule(valid_proportions=0.05,
                                         batch_size=batch_size)
         collator = klue.KLUEMRCDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
-                                                                                    use_auth_token=True),
+                                                                                    token=True),
                                             label_map=None,
                                             max_seq_length=max_seq_length,)
         gold_labels = None
@@ -158,7 +158,7 @@ def get_task_data(task_name: str, batch_size: int,
         data_module = KLUENERDataModule(valid_proportions=0.05,
                                         batch_size=batch_size)
         collator = klue.KLUENERDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
-                                                                                    use_auth_token=True),
+                                                                                    token=True),
                                             label_map=None,
                                             max_seq_length=max_seq_length,)
         gold_labels = None
@@ -167,14 +167,14 @@ def get_task_data(task_name: str, batch_size: int,
                                         batch_size=batch_size)
         # NOTE: max_seq_length에 주의한다. label 파트까지 포함하면 원문의 * 3배이상이 필요.
         collator = klue.KLUEDPDataCollator(tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
-                                                                                   use_auth_token=True),
+                                                                                   token=True),
                                            label_map=None,
                                            max_seq_length=max_seq_length,)
         gold_labels = None
     elif task_name == 'korquad-v1':
         data_module = KorQuadV1DataModule(valid_proportions=0.05, batch_size=batch_size)
         collator = korquad_v1.KorQuadV1DataCollator(
-                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str, use_auth_token=True),
+                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str, token=True),
                 label_map=None, max_seq_length=max_seq_length,)
         gold_labels = None
     elif task_name == 'hfdataset':
@@ -182,13 +182,13 @@ def get_task_data(task_name: str, batch_size: int,
         data_module = GenericHFDataModule(batch_size, train_data_file, valid_data_file, test_data_file,
                                           valid_proportions, test_proportions, max_seq_length,
                                           AutoTokenizer.from_pretrained(tokenizer_str,
-                                                                        use_auth_token=True),
+                                                                        token=True),
                                           do_truncate,
                                           hf_cache_dir=hf_cache_dir)
         collator = generic.GenericDataCollator(input_field_name="text",
                                                label_field_name="label",
                                                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
-                                                                                       use_auth_token=True),
+                                                                                       token=True),
                                                label_map=None,
                                                max_seq_length=max_seq_length,)
         gold_labels = None
@@ -196,13 +196,13 @@ def get_task_data(task_name: str, batch_size: int,
         data_module = GenericJsonLinesDataModule(batch_size, train_data_file, valid_data_file, test_data_file,
                                           valid_proportions, test_proportions, max_seq_length,
                                           AutoTokenizer.from_pretrained(tokenizer_str,
-                                                                        use_auth_token=True),
+                                                                        token=True),
                                           do_truncate,
                                           hf_cache_dir=hf_cache_dir)
         collator = generic.GenericDataCollator(input_field_name="text",
                                                label_field_name="label",
                                                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
-                                                                                       use_auth_token=True),
+                                                                                       token=True),
                                                label_map=None,
                                                max_seq_length=max_seq_length,)
         gold_labels = None
@@ -213,13 +213,13 @@ def get_task_data(task_name: str, batch_size: int,
                                            valid_proportions, test_proportions,
                                            max_seq_length,
                                            AutoTokenizer.from_pretrained(tokenizer_str,
-                                                                         use_auth_token=True),
+                                                                         token=True),
                                            do_truncate,
                                            hf_cache_dir=hf_cache_dir)
         collator = generic.GenericDataCollator(input_field_name="text",
                                                label_field_name="target_text",
                                                tokenizer=AutoTokenizer.from_pretrained(tokenizer_str,
-                                                                                       use_auth_token=True),
+                                                                                       token=True),
                                                label_map=None,
                                                max_seq_length=max_seq_length,)
         gold_labels = None

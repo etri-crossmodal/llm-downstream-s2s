@@ -221,7 +221,7 @@ if __name__ == '__main__':
     model.hparams.num_beams_for_test = args.beam_size
     model.hparams.max_predict_length = args.max_predict_length
 
-    model.tknizer = tknizer = AutoTokenizer.from_pretrained(args.tokenizer, use_auth_token=True)
+    model.tknizer = tknizer = AutoTokenizer.from_pretrained(args.tokenizer, token=True)
     # set collator
     model.data_collator = collator
 

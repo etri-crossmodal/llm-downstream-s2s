@@ -162,18 +162,18 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
             self.hparams.tuning_method = 'finetune'
 
         if hf_config_path != "":
-            model_cfg = AutoConfig.from_pretrained(hf_config_path, use_auth_token=True)
+            model_cfg = AutoConfig.from_pretrained(hf_config_path, token=True)
             if isinstance(model_cfg, GBSWT5.GBSWT5Config):
                 model_cfg.z_loss = 0.0
             #self.model = T5ForConditionalGeneration(model_cfg)
             self.model = AutoModelForSeq2SeqLM.from_config(model_cfg)
         elif model_or_path != "":
-            #self.model = T5ForConditionalGeneration.from_pretrained(model_or_path, use_auth_token=True)
-            model_cfg = AutoConfig.from_pretrained(model_or_path, use_auth_token=True)
+            #self.model = T5ForConditionalGeneration.from_pretrained(model_or_path, token=True)
+            model_cfg = AutoConfig.from_pretrained(model_or_path, token=True)
             if isinstance(model_cfg, GBSWT5.GBSWT5Config):
                 model_cfg.z_loss = 0.0      # 학습 성능을 위해 z_loss를 제외
             self.model = AutoModelForSeq2SeqLM.from_pretrained(model_or_path, config=model_cfg,
-                                                               use_auth_token=True)
+                                                               token=True)
         else:
             raise ValueError("assign hf_config_path or model_or_path parameters to initialize model.")
 
@@ -216,7 +216,7 @@ class ETRIT5ConditionalGenModelLightningModule(pl.LightningModule):
             self.model.gradient_checkpointing_enable()
 
         if isinstance(tokenizer, str):
-            self.tknizer = AutoTokenizer.from_pretrained(tokenizer, use_auth_token=True)
+            self.tknizer = AutoTokenizer.from_pretrained(tokenizer, token=True)
         elif isinstance(tokenizer, Callable):
             self.tknizer = tokenizer
 
